@@ -1,0 +1,1996 @@
+---
+title: "Untitled"
+author: "Kelvias Keter"
+date: "2024-11-11"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+## knitr options
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = F, message = FALSE,echo = TRUE)
+```
+
+### Load packages
+
+```{r }
+library(pacman)
+
+p_load("tidyverse", "readxl","gtsummary","gt", "writexl", "ggpubr", "ggplot2","here","dgof", "reshape2","psych","DescTools","mdatools","lme4", "Matrix","sjPlot","rms","here","bstfun","patchwork","rstatix", "car","flextable","purrr","lattice","cutpointr","binom","devtools","effsize")
+
+# devtools::install_github("MSKCC-Epi-Bio/bstfun")
+
+
+```
+
+## Set paths and load data
+
+This code chunk aims to import the pooled Afrim and KMLC dataset
+
+```{r}
+pooled_dataset <-read.csv("C:\\Users\\Kelvias Keter\\OneDrive\\Desktop\\msc project\\MSc Data analysis\\data\\pooled_dataset.csv")
+
+
+```
+
+
+
+## Anova test assumptions
+
+```{r}
+##Normality test
+shapiro.test(pooled_dataset$IgM.Eus)#Raw
+
+shapiro.test(pooled_dataset$Igm_log)#Log-transformed
+
+## Homogeinity test
+LeveneTest(IgM.Eus~age_groups2,
+           data = pooled_dataset)
+
+LeveneTest(Igm_log~age_groups2,
+           data = pooled_dataset)
+
+## Outlier test
+
+afirm_dataset_posthoc <- pooled_dataset%>%
+  select(age_groups2,Igm_log,IgM.Eus)
+
+afirm_dataset_posthoc %>% 
+  group_by(age_groups2) %>%
+  identify_outliers(IgM.Eus)
+
+afirm_dataset_posthoc %>% 
+  group_by(age_groups2) %>%
+  identify_outliers(Igm_log)
+
+```
+
+## Test for normality IgM
+
+```{r}
+
+#Raw
+ggplot(pooled_dataset, aes(IgM.Eus)) +
+  geom_histogram(aes(y = ..density..), bins = 30, fill = "grey", color = "black") +  # Histogram with density on y-axis
+  geom_density(color = "black", size = 0.8) +  # Add the density plot
+  geom_vline(xintercept = 64.66449257, linetype = 2, linewidth = 1.5, color = "red") +
+  labs(x = "IgM ELISA Units raw", y = "Density") +
+  theme_classic() +
+   theme(text = element_text(size=20))
+
+# folder_path <-"C:\\Users\\Kelvias Keter\\OneDrive\\Desktop\\msc project\\MSc Data analysis\\rplots"
+# 
+# ggsave("IgMhist.png", path=folder_path, dpi=800, width = 8, height = 6)
+
+#Log-transformed
+
+ggplot(pooled_dataset, aes(Igm_log)) +
+  geom_histogram(aes(y = ..density..), bins = 30, fill = "grey", color = "black") +  # Histogram with density on y-axis
+  geom_density(color = "black", size = 0.8) +  # Add the density plot
+  geom_vline(xintercept = 4.169212, linetype = 2, linewidth = 1.5, color = "red") +
+  labs(x = "IgM ELISA Units log-transformed", y = "Density") +
+  theme_classic() +
+  theme(text = element_text(size=20))
+
+# folder_path <-"C:\\Users\\Kelvias Keter\\OneDrive\\Desktop\\msc project\\MSc Data analysis\\rplots"
+# 
+# ggsave("IgMhistlog.png", path=folder_path, dpi=800, width = 8, height = 6)
+
+```
+
+##Boxplots for log-transformed IgM ELISA units by age Combined pooled dataset
+
+```{r}
+
+# Edit from here
+x <- which(names(pooled_dataset) == "age_groups2") # name of grouping variable
+y <- which(
+  names(pooled_dataset) == "Igm_log" # names of variables to test
+)
+method1 <- "kruskal.test" # one of "anova" or "kruskal.test"
+method2 <- "wilcox.test" # one of "wilcox.test" or "t.test"
+
+
+pooled_dataset$age_groups2 <-factor(pooled_dataset$age_groups2,levels=c("<5 Yrs","5-9 Yrs","10-15 Yrs",">15 Yrs"))
+
+my_comparisations1 <- list( c("<5 Yrs","5-9 Yrs"), c("<5 Yrs","10-15 Yrs"), c("<5 Yrs",">15 Yrs"),c("5-9 Yrs","10-15 Yrs"),c("5-9 Yrs",">15 Yrs"),c("10-15 Yrs",">15 Yrs"))
+# comparisons for post-hoc tests
+# Edit until here
+
+# Edit at your own risk
+for (i in y) {
+  for (j in x) {
+    p <- ggboxplot(pooled_dataset,
+      x = colnames(pooled_dataset[j]), y = colnames(pooled_dataset[i]),
+      color = colnames(pooled_dataset[j]),
+      legend = "none",
+      palette = "npg",
+      add = "jitter"
+    )
+    print(
+      p + stat_compare_means(aes(label = paste0(after_stat(method), ", p-value = ",size = 12, after_stat(p.format))),
+        method = method1, label.y = max(pooled_dataset[, i], na.rm = TRUE, label.y = 15)
+      )
+      + stat_compare_means(comparisons =my_comparisations1 , method = method2, label = "p.signif") # remove if p-value of ANOVA or Kruskal-Wallis test >= alpha 
+      +geom_hline(yintercept = 4.169212, linetype = 2, linewidth = 0.9, color = "red") +
+        labs(title = "",
+       x = "Age", y = "Log-transformed IgM ELISA Units")+
+        theme(text = element_text(size=20))
+      )
+    
+
+}
+}
+# folder_path <-"C:\\Users\\Kelvias Keter\\OneDrive\\Desktop\\msc project\\MSc Data analysis\\rplots"
+# 
+# 
+# ggsave("Log-transformed IgM_by age.png", path=folder_path, dpi=800, width = 8, height = 6)
+```
+
+## Statistical assumptions
+
+```{r}
+## Normality test
+shapiro.test(pooled_dataset$IgA.Eus)#Raw
+
+shapiro.test(pooled_dataset$IgA_log)#Log Transformed
+
+## Homogeinity test
+
+LeveneTest(IgA.Eus~age_groups2,
+           data = pooled_dataset)
+
+LeveneTest(IgA_log~age_groups2,
+           data = pooled_dataset)
+
+## Outlier test         
+pooled_dataset_new <- pooled_dataset %>%
+  select(c(age_groups2,IgA_log,IgA.Eus))
+
+pooled_dataset_new %>% 
+  group_by(age_groups2) %>%
+  identify_outliers(IgA.Eus)
+
+pooled_dataset_new %>% 
+  group_by(age_groups2) %>%
+  identify_outliers(IgA_log)
+
+```
+
+## Test for normality IgA
+
+```{r}
+#Raw
+ggplot(pooled_dataset, aes(IgA.Eus)) +
+  geom_histogram(aes(y = ..density..), bins = 30, fill = "grey", color = "black") +  # Histogram with density on y-axis
+  geom_density(color = "black", size = 0.8) +  # Add the density plot
+  geom_vline(xintercept = 93.20746839, linetype = 2, linewidth = 1.5, color = "red") +
+  labs(x = "IgA ELISA Units raw", y = "Density") +
+  theme_classic() +
+  theme(text = element_text(size = 20))
+
+# folder_path <-"C:\\Users\\Kelvias Keter\\OneDrive\\Desktop\\msc project\\MSc Data analysis\\rplots"
+# 
+# 
+# ggsave("IgAhist.png", width = 8, height = 6,path=folder_path)
+
+
+#Log-transformed
+
+ggplot(pooled_dataset, aes(IgA_log)) +
+  geom_histogram(aes(y = ..density..), bins = 30, fill = "grey", color = "black") +  # Histogram with density on y-axis
+  geom_density(color = "black", size = 0.8) +  # Add the density plot
+  geom_vline(xintercept = 4.534828, linetype = 2, linewidth = 1.5, color = "red") +
+  labs(x = "IgA ELISA Units log-transformed", y = "Density") +
+  theme_classic() +
+  theme(text = element_text(size = 20))
+
+# folder_path <-"C:\\Users\\Kelvias Keter\\OneDrive\\Desktop\\msc project\\MSc Data analysis\\rplots"
+# 
+# 
+# ggsave("IgAhistlog.png", width = 8, height = 6,path=folder_path)
+
+```
+
+
+## Boxplots for log-transformed IgA ELISA units by age
+
+```{r}
+# Edit from here
+x <- which(names(pooled_dataset) == "age_groups2") # name of grouping variable
+y <- which(
+  names(pooled_dataset) == "IgA_log" # names of variables to test
+)
+method1 <- "kruskal.test" # one of "anova" or "kruskal.test"
+method2 <- "wilcox.test" # one of "wilcox.test" or "t.test"
+
+pooled_dataset$age_groups2 <-factor(pooled_dataset$age_groups2,levels=c("<5 Yrs","5-9 Yrs","10-15 Yrs",">15 Yrs"))
+
+my_comparisations2 <- list( c("<5 Yrs","5-9 Yrs"), c("<5 Yrs","10-15 Yrs"), c("<5 Yrs",">15 Yrs"),c("5-9 Yrs","10-15 Yrs"),c("5-9 Yrs",">15 Yrs"),c("10-15 Yrs",">15 Yrs"))
+# comparisons for post-hoc tests
+# Edit until here
+
+# Edit at your own risk
+for (i in y) {
+  for (j in x) {
+    p <- ggboxplot(pooled_dataset,
+      x = colnames(pooled_dataset[j]), y = colnames(pooled_dataset[i]),
+      color = colnames(pooled_dataset[j]),
+      legend = "none",
+      palette = "npg",
+      add = "jitter"
+    )
+    print(
+      p + stat_compare_means(aes(label = paste0(after_stat(method), ", p-value = ", after_stat(p.format))),
+        method = method1, label.y = max(pooled_dataset[, i], na.rm = TRUE, label.y = 15)
+      )
+      + stat_compare_means(comparisons =my_comparisations2 , method = method2, label = "p.signif") # remove if p-value of ANOVA or Kruskal-Wallis test >= alpha 
+      +geom_hline(yintercept = 4.534828, linetype = 2, linewidth = 0.9, color = "red") +
+        labs(title = " ",
+       x = "Age", y = "Log-transformed IgA ELISA Units") +
+         theme(text = element_text(size = 20))
+    )
+  }
+}
+ 
+
+# folder_path <-"C:\\Users\\Kelvias Keter\\OneDrive\\Desktop\\msc project\\MSc Data analysis\\rplots"
+# 
+# ggsave("Log-transformed IgA_byage.png", width = 8, height = 6, path=folder_path)
+```
+## Boxplots for log-transformed IgM ELISA units by asexual parasitemia
+```{r}
+my_comparisations0 <- list( c("Asexual parasite  -ve", "Asexual parasite  +ve"))
+
+x <- which(names(pooled_dataset) == "Parasitetepositive") # name of grouping variable
+y <- which(
+  names(pooled_dataset) == "Igm_log" # names of variables to test
+)
+
+method <- "wilcox.test" # one of "wilcox.test" or "t.test"
+
+pooled_dataset %>%
+  select(c(Igm_log, Parasitetepositive))
+
+
+for (i in y) {
+  for (j in x) {
+    p <- ggboxplot(pooled_dataset,
+      x = colnames(pooled_dataset[j]), y = colnames(pooled_dataset[i]),
+      color = colnames(pooled_dataset[j]),
+      legend = "none",
+      palette = "npg",
+      add = "jitter"
+    )
+    print(
+      p + stat_compare_means(aes(label = paste0(after_stat(method), ", p-value = ", after_stat(p.format))),
+        method = method, label.y = max(pooled_dataset[, i], na.rm = TRUE, label.y = 15)
+      )
+      + stat_compare_means(comparisons =my_comparisations0 , method = method, label = "p.signif") # remove if p-value of ANOVA or Kruskal-Wallis test >= alpha 
+      +geom_hline(yintercept = 4.169212, linetype = 2, linewidth = 0.9, color = "red") +
+        labs(title = "",
+       x = " Asexual parasitemia (Microscopy)", y = "Log-transformed IgM ELISA Units") +
+        theme(text = element_text(size=20))
+    )
+  }
+}
+```
+
+```{r}
+my_comparisations3 <- list( c("Gametocyte  -ve", "Gametocyte  +ve"))
+
+x <- which(names(pooled_dataset) == "gametocytepositive") # name of grouping variable
+y <- which(
+  names(pooled_dataset) == "IgM_log" # names of variables to test
+)
+
+method <- "wilcox.test" # one of "wilcox.test" or "t.test"
+
+pooled_dataset %>%
+  select(c(Igm_log, gametocytepositive))
+
+
+for (i in y) {
+  for (j in x) {
+    p <- ggboxplot(pooled_dataset,
+      x = colnames(pooled_dataset[j]), y = colnames(pooled_dataset[i]),
+      color = colnames(pooled_dataset[j]),
+      legend = "none",
+      palette = "npg",
+      add = "jitter"
+    )
+    print(
+      p + stat_compare_means(aes(label = paste0(after_stat(method), ", p-value = ", after_stat(p.format))),
+        method = method, label.y = max(pooled_dataset[, i], na.rm = TRUE, label.y = 15)
+      )
+      + stat_compare_means(comparisons =my_comparisations3 , method = method, label = "p.signif") # remove if p-value of ANOVA or Kruskal-Wallis test >= alpha 
+      +geom_hline(yintercept = 4.169212, linetype = 2, linewidth = 0.9, color = "red") +
+        labs(title = "",
+       x = " Gametocytemia (Microscopy)", y = "Log-transformed IgM ELISA Units") +
+        theme(text = element_text(size=20))
+    )
+  }
+}
+```
+
+## Correlation analysis IgM log and gametocytaemia Afirm
+
+```{r}
+pooled_dataset <- pooled_dataset %>%
+  mutate(log_Pf.Gam.Dens=log(Pf.Gam.Dens+1))
+
+
+names(pooled_dataset)[names(pooled_dataset) == "age_groups2"] <- "Age"
+
+ggscatter(pooled_dataset, x = "log_Pf.Gam.Dens", y ="Igm_log",
+   color = "Age", #shape = 21, size = 3, # Points color, shape and size
+   add = "reg.line",  # Add regressin line
+   add.params = list(color = "blue", fill = "lightgray"), # Customize reg. line
+   conf.int = TRUE, # Add confidence interval
+   cor.coef = TRUE, # Add correlation coefficient. see ?stat_cor
+   cor.coeff.args = list(method = "spearman", label.y=2, label.x =6,
+                         label.sep = "\n")) +
+  labs(x = "Log-transformed Gametocytaemia (Microscopy)", y = "Log-transformed IgM ELISA Units")+
+  theme(text = element_text(size = 20))
+
+# folder_path <-"C:\\Users\\Kelvias Keter\\OneDrive\\Desktop\\msc project\\MSc Data analysis\\rplots"
+# 
+# ggsave("scatter_afm_iga_log gam.png", dpi=800, width = 8, height =6,path=folder_path)
+```
+
+## Correlation analysis IgA log and gametocytaemia pooled dataset
+```{r}
+
+ggscatter(pooled_dataset, x = "log_Pf.Gam.Dens", y ="IgA_log",
+   color = "Age", #shape = 21, size = 3, # Points color, shape and size
+   add = "reg.line",  # Add regressin line
+   add.params = list(color = "blue", fill = "lightgray"), # Customize reg. line
+   conf.int = TRUE, # Add confidence interval
+   cor.coef = TRUE, # Add correlation coefficient. see ?stat_cor
+   cor.coeff.args = list(method = "spearman", label.y=2, label.x =6,
+                         label.sep = "\n")) +
+  labs(x = "Log-transformed Gametocytaemia (Microscopy)", y = "Log-transformed IgA ELISA Units")+
+  theme(text = element_text(size = 20))
+
+# folder_path <-"C:\\Users\\Kelvias Keter\\OneDrive\\Desktop\\msc project\\MSc Data analysis\\rplots"
+# 
+# ggsave("scatter_afm_iga_log gam.png", dpi=800, width = 8, height =6,path=folder_path)
+```
+
+
+## Correlation analysis Igm log and parasitemia pooled dataset
+
+```{r}
+pooled_dataset <- pooled_dataset %>%
+  mutate(log_Pf.Dens=log(Pf.Dens +1))
+
+
+names(pooled_dataset)[names(pooled_dataset) == "age_groups2"] <- "Age"
+
+ggscatter(pooled_dataset, x = "log_Pf.Dens", y ="Igm_log",
+   color = "Age", #shape = 21, size = 3, # Points color, shape and size
+   add = "reg.line",  # Add regressin line
+   add.params = list(color = "blue", fill = "lightgray"), # Customize reg. line
+   conf.int = TRUE, # Add confidence interval
+   cor.coef = TRUE, # Add correlation coefficient. see ?stat_cor
+   cor.coeff.args = list(method = "spearman", label.y=1, label.x =9,
+                         label.sep = "\n")) +
+  labs(x = "Log-transformed Parasitaemia (Microscopy)", y = "Log-transformed IgM ELISA Units") +
+
+theme(text = element_text(size = 20))
+
+# folder_path <-"C:\\Users\\Kelvias Keter\\OneDrive\\Desktop\\msc project\\MSc Data analysis\\rplots"
+# 
+# ggsave("scatter_afm_igm_18S.png", dpi=800, width = 8, height =6, path=folder_path)
+
+```
+
+## Correlation analysis IgA log and parasitemia pooled dataset
+
+```{r}
+
+
+names(pooled_dataset)[names(pooled_dataset) == "age_groups2"] <- "Age"
+
+ggscatter(pooled_dataset, x = "log_Pf.Dens", y ="IgA_log",
+   color = "Age", #shape = 21, size = 3, # Points color, shape and size
+   add = "reg.line",  # Add regressin line
+   add.params = list(color = "blue", fill = "lightgray"), # Customize reg. line
+   conf.int = TRUE, # Add confidence interval
+   cor.coef = TRUE, # Add correlation coefficient. see ?stat_cor
+   cor.coeff.args = list(method = "spearman", label.y=9, label.x =12,
+                         label.sep = "\n")) +
+  labs(x = "Log-transformed Parasitaemia (Microscopy)", y = "Log-transformed IgA ELISA Units") +
+theme(text = element_text(size = 20))
+
+# folder_path <-"C:\\Users\\Kelvias Keter\\OneDrive\\Desktop\\msc project\\MSc Data analysis\\rplots"
+# 
+# ggsave("scatter_afm_igA_18S.png", dpi=800, width = 8, height =6, path=folder_path)
+```
+
+
+## Correlation analysis btwn IgA and IgM pooled dataset
+
+```{r}
+ggscatter(pooled_dataset, x = "Igm_log", y ="IgA_log",
+   add = "reg.line",  # Add regressin line
+   add.params = list(color = "blue", fill = "lightgray"), # Customize reg. line
+   conf.int = TRUE, # Add confidence interval
+   cor.coef = TRUE, # Add correlation coefficient. see ?stat_cor
+   cor.coeff.args = list(method = "spearman", label.y=2, label.x =7,
+                         label.sep = "\n")) +
+  labs(x = "Log-transformed IgM ELISA Units", y = "Log-transformed IgA ELISA Units") +
+theme(text = element_text(size = 20))
+
+# folder_path <-"C:\\Users\\Kelvias Keter\\OneDrive\\Desktop\\msc project\\MSc Data analysis\\rplots"
+# 
+# ggsave("scatter_afm_igA_18S.png", dpi=800, width = 8, height =6, path=folder_path)
+```
+
+## Correlation analysis btwn IgG and IgM pooled dataset
+
+```{r}
+
+  pooled_dataset <- pooled_dataset %>%
+  mutate(log_ge.conc=log(ge.conc+1))
+
+
+ggscatter(pooled_dataset, x = "Igm_log", y ="log_ge.conc",
+   add = "reg.line",  # Add regressin line
+   add.params = list(color = "blue", fill = "lightgray"), # Customize reg. line
+   conf.int = TRUE, # Add confidence interval
+   cor.coef = TRUE, # Add correlation coefficient. see ?stat_cor
+   cor.coeff.args = list(method = "spearman", label.y=2, label.x =7,
+                         label.sep = "\n")) +
+  labs(x = "Log-transformed IgM ELISA Units", y = "Log-transformed IgG ELISA Units") +
+theme(text = element_text(size = 20))
+
+# folder_path <-"C:\\Users\\Kelvias Keter\\OneDrive\\Desktop\\msc project\\MSc Data analysis\\rplots"
+# 
+# ggsave("scatter_afm_igA_18S.png", dpi=800, width = 8, height =6, path=folder_path)
+```
+
+## Correlation analysis btwn IgA and IgG pooled dataset
+
+```{r}
+ggscatter(pooled_dataset, x = "IgA_log", y ="log_ge.conc",
+   add = "reg.line",  # Add regressin line
+   add.params = list(color = "blue", fill = "lightgray"), # Customize reg. line
+   conf.int = TRUE, # Add confidence interval
+   cor.coef = TRUE, # Add correlation coefficient. see ?stat_cor
+   cor.coeff.args = list(method = "spearman", label.y=2, label.x =7,
+                         label.sep = "\n")) +
+  labs(x = "Log-transformed IgA ELISA Units", y = "Log-transformed IgG ELISA Units") +
+theme(text = element_text(size = 20))
+
+# folder_path <-"C:\\Users\\Kelvias Keter\\OneDrive\\Desktop\\msc project\\MSc Data analysis\\rplots"
+#
+# ggsave("scatter_afm_igA_18S.png", dpi=800, width = 8, height =6, path=folder_path)
+```
+
+## Regression analysis IgM seropositivity pooled
+
+```{r}
+# Load necessary libraries
+library(tidyverse)
+library(gtsummary)
+library(flextable)
+
+# Set a valid theme element
+list("tbl_regression-str:ref_row_text" = "Ref") %>%
+  set_gtsummary_theme() 
+
+## Univariate analysis
+reg_model <- pooled_dataset %>%
+  dplyr::select(IGMseropositive, Age, cohort2, ama1_response, gametocytepositive, Parasitetepositive) %>% 
+  tbl_uvregression(label = list
+                (Age~"Age", cohort2~"Cohort", ama1_response~"AMA1 response", Parasitetepositive~"Asexual parasitemia",gametocytepositive~"Gametocytemia"),
+    method = glm,
+    y=IGMseropositive,
+    method.args = list(family = "binomial"),
+    exponentiate = TRUE
+  ) %>% 
+  bold_p(t = 0.05) %>% 
+  modify_header(label = "**Covariates**") %>% 
+  italicize_levels() 
+
+reg_model
+
+# Set a valid theme element
+list("tbl_regression-str:ref_row_text" = "Ref") %>%
+  set_gtsummary_theme() 
+
+## Multivariate analysis
+bm1 <- glm(IGMseropositive ~ Age + cohort2 + ama1_response + gametocytepositive + Parasitetepositive, 
+             data = pooled_dataset, family = binomial)
+
+bm_table1 <- tbl_regression(bm1,exponentiate=TRUE, label = list
+                (season~"Season", gam_IgG_response~"Gametocyte extract IgG response", ama1_response~"AMA1 response",qpcr_18s~"Asexual parasitemia",nasba_pfs25~"Gametocytemia", IgA_log~"Gametocyte extract IgA response",age~"Age") )%>% 
+   bold_p(t = 0.05) %>% 
+  modify_header(label = "**Covariates**") %>% 
+  italicize_levels() 
+ 
+bm_table1
+
+# Create a model merging univariate and multivariate analysis
+uni_multi <- tbl_merge(tbls = list(reg_model,bm_table1), 
+                       tab_spanner = c ("**Univariate analysis**","**Multivariate analysis**")) 
+uni_multi
+
+
+## Save the table
+uni_multi %>%
+  as_flex_table() %>%
+  save_as_image(path = "fancy_tableIgM AFIRM_I.png")
+```
+
+
+## Participant characteristics pooled dataset
+
+
+```{r}
+pooled_dataset%>% dplyr::select(c(cohort2,Age,sex,ge.conc,ama1_response,Pf.Dens,Pf.Gam.Dens)) %>%
+  tbl_summary(by=cohort2,
+    label = list(sex~"Sex",
+                 Age~"Age (Years)",
+                 Pf.Dens~"Asexual parasitaemia",
+                 Pf.Gam.Dens~"Gametocytaemia",
+                 ama1_response~"AMA1 response",
+                 ge.conc~"Gametocyte extract IgG response"),
+    missing = "no"
+                 ) %>%
+  add_stat_label(label=all_continuous()~"Median (IQR)") %>% 
+  add_overall() %>% 
+  add_variable_grouping ("Demographics"=c(
+    "Age",
+    "sex")) %>%
+  add_variable_grouping ("Parasitological indices"=c(
+    "ge.conc",
+   "ama1_response",
+   "Pf.Dens",
+   "Pf.Gam.Dens"
+   )) %>% 
+  add_n() %>%
+  add_p() %>% 
+  bold_labels() %>% 
+  bold_p() %>% 
+   modify_caption("Table 2. Participant characteristics pooled cohort")  %>% 
+  as_gt() %>% 
+  gt::gtsave(filename = "tblxticspooled.png",vwidth = 2500, vheight = 1500)
+```
+
+### normality for parasitemia afirm
+
+```{r}
+ggplot(afirm_dataset, aes(qpcr_18s)) +
+  geom_histogram(aes(y = ..density..), bins = 30, fill = "grey", color = "black") +  # Histogram with density on y-axis
+  geom_density(color = "black", size = 0.8) +  # Add the density plot
+   
+  labs(x = "qpcr18s Units raw", y = "Density") +
+  theme_classic() +
+   theme(text = element_text(size=20))
+
+# folder_path <-"C:\\Users\\Kelvias Keter\\OneDrive\\Desktop\\msc project\\MSc Data analysis\\rplots"
+# 
+# ggsave("i8sqpcrafirmhist.png", path=folder_path, dpi=800, width = 8, height = 6)
+
+```
+
+### normality for gametocytaemia Afirm
+
+```{r}
+ggplot(afirm_dataset, aes(nasba_pfs25)) +
+  geom_histogram(aes(y = ..density..), bins = 30, fill = "grey", color = "black") +  # Histogram with density on y-axis
+  geom_density(color = "black", size = 0.8) +  # Add the density plot
+  
+  labs(x = "nasba_pfs25 Units raw", y = "Density") +
+  theme_classic() +
+   theme(text = element_text(size=20))
+
+# folder_path <-"C:\\Users\\Kelvias Keter\\OneDrive\\Desktop\\msc project\\MSc Data analysis\\rplots"
+# 
+# ggsave("gametocytaemia afirmhist.png", path=folder_path, dpi=800, width = 8, height = 6)
+
+```
+
+### normality for ama1 Afirm
+
+```{r}
+ggplot(afirm_dataset, aes(ama1_response)) +
+  geom_histogram(aes(y = ..density..), bins = 30, fill = "grey", color = "black") +  # Histogram with density on y-axis
+  geom_density(color = "black", size = 0.8) +  # Add the density plot
+  
+  labs(x = "ama1_response Units raw", y = "Density") +
+  theme_classic() +
+   theme(text = element_text(size=20))
+
+# folder_path <-"C:\\Users\\Kelvias Keter\\OneDrive\\Desktop\\msc project\\MSc Data analysis\\rplots"
+# 
+# ggsave("ama1_response afirmhist.png", path=folder_path, dpi=800, width = 8, height = 6)
+
+
+```
+
+#### normality for Gam IgG Afirm
+
+```{r}
+ggplot(afirm_dataset, aes(gam_IgG_response)) +
+  geom_histogram(aes(y = ..density..), bins = 30, fill = "grey", color = "black") +  # Histogram with density on y-axis
+  geom_density(color = "black", size = 0.8) +  # Add the density plot
+  
+  labs(x = "gam_IgG_response Units raw", y = "Density") +
+  theme_classic() +
+   theme(text = element_text(size=20))
+
+# folder_path <-"C:\\Users\\Kelvias Keter\\OneDrive\\Desktop\\msc project\\MSc Data analysis\\rplots"
+# 
+# ggsave("gam_IgG_response afirmhist.png", path=folder_path, dpi=800, width = 8, height = 6)
+
+
+```
+
+### normality for parasitemia KMLC
+
+```{r}
+ggplot(KMLC_dataset, aes(pf_mcl)) +
+  geom_histogram(aes(y = ..density..), bins = 30, fill = "grey", color = "black") +  # Histogram with density on y-axis
+  geom_density(color = "black", size = 0.8) +  # Add the density plot
+   
+  labs(x = "pf_mcl Units raw", y = "Density") +
+  theme_classic() +
+   theme(text = element_text(size=20))
+
+# folder_path <-"C:\\Users\\Kelvias Keter\\OneDrive\\Desktop\\msc project\\MSc Data analysis\\rplots"
+# 
+# ggsave("pf_mclkmlchist.png", path=folder_path, dpi=800, width = 8, height = 6)
+
+```
+
+### normality for gametocytaemia KMLC
+
+```{r}
+ggplot(KMLC_dataset, aes(gam_mcl)) +
+  geom_histogram(aes(y = ..density..), bins = 30, fill = "grey", color = "black") +  # Histogram with density on y-axis
+  geom_density(color = "black", size = 0.8) +  # Add the density plot
+  
+  labs(x = "gam_mcl Units raw", y = "Density") +
+  theme_classic() +
+   theme(text = element_text(size=20))
+
+# folder_path <-"C:\\Users\\Kelvias Keter\\OneDrive\\Desktop\\msc project\\MSc Data analysis\\rplots"
+# 
+# ggsave("gametocytaemia kmlchist.png", path=folder_path, dpi=800, width = 8, height = 6)
+
+```
+
+### normality for ama1 KMLC
+
+```{r}
+ggplot(KMLC_dataset, aes(ama1.conc)) +
+  geom_histogram(aes(y = ..density..), bins = 30, fill = "grey", color = "black") +  # Histogram with density on y-axis
+  geom_density(color = "black", size = 0.8) +  # Add the density plot
+  
+  labs(x = "ama1.conc Units raw", y = "Density") +
+  theme_classic() +
+   theme(text = element_text(size=20))
+
+# folder_path <-"C:\\Users\\Kelvias Keter\\OneDrive\\Desktop\\msc project\\MSc Data analysis\\rplots"
+# 
+# ggsave("ama1_response kmlchist.png", path=folder_path, dpi=800, width = 8, height = 6)
+
+
+```
+
+#### normality for Gam IgG KMLC
+
+```{r}
+ggplot(KMLC_dataset, aes(ge.conc)) +
+  geom_histogram(aes(y = ..density..), bins = 30, fill = "grey", color = "black") +  # Histogram with density on y-axis
+  geom_density(color = "black", size = 0.8) +  # Add the density plot
+  
+  labs(x = "ge conc Units raw", y = "Density") +
+  theme_classic() +theme_classic() +
+theme_classic() +
+theme_classic() +
+theme_classic() +
+theme_classic() +
+theme_classic() +
+
+   theme(text = element_text(size=20))
+# folder_path <-"C:\\Users\\Kelvias Keter\\OneDrive\\Desktop\\msc project\\MSc Data analysis\\rplots"
+# 
+# ggsave("gam_IgG_response kmlchist.png", path=folder_path, dpi=800, width = 8, height = 6)
+
+
+```
+
+## Code to save a export AFIRM and KMLC datasets
+
+```{r}
+write_csv(afirm_dataset, "AFIRM15012025.csv")
+
+```
+
+### roc IgM responses predictor AFIRM
+
+```{r}
+
+library(pROC)
+# Predicted probabilities
+prob <- predict(bm1, type = "response")
+
+# ROC curve and AUC
+roc_obj <- roc(afirm_dataset$IGMseropositive, prob)
+plot(roc_obj)
+auc(roc_obj)
+
+```
+
+### roc IgA responses predictor AFIRM
+
+```{r}
+
+library(pROC)
+# Predicted probabilities
+prob1 <- predict(bm2, type = "response")
+
+
+
+# ROC curve and AUC
+roc_obj <- roc(afirm_dataset$IGAseropositive, prob1)
+plot(roc_obj)
+auc(roc_obj)
+
+```
+
+### roc gametocytemia responses predictor AFIRM
+
+```{r}
+
+library(pROC)
+# Predicted probabilities
+prob <- predict(bm12, type = "response")
+
+# ROC curve and AUC
+roc_obj <- roc(afirm_dataset$gametocytepositive, prob)
+plot(roc_obj)
+auc(roc_obj)
+
+```
+
+## AFIRM ROC curves
+
+```{r}
+library(pROC)
+# Predicted probabilities
+prob <- predict(bm1, type = "response")
+prob1 <- predict(bm2, type = "response")
+prob12 <- predict(bm12, type = "response")
+ 
+
+library(pROC)
+ 
+# ROC curve and AUC
+roc_obj1 <- roc(afirm_dataset$IGMseropositive, prob)
+roc_obj2 <- roc(afirm_dataset$IGAseropositive, prob1)
+roc_obj12 <- roc(afirm_dataset$gametocytepositive, prob12)
+
+# auc(roc_obj1)
+# auc(roc_obj2)
+# auc(roc_obj12)
+
+# Calculate 95% confidence intervals for each ROC curve
+ci_obj1 <- ci(roc_obj1, conf.level = 0.95)
+ci_obj2 <- ci(roc_obj2, conf.level = 0.95)
+ci_obj12 <- ci(roc_obj12, conf.level = 0.95)
+png("roc_curveafirm.png", width = 1200,height = 800)
+
+# Example of plotting multiple ROC curves
+plot(roc_obj1, col = "blue",
+        print.auc=TRUE , main = "ROC Curves",cex.axis = 2.0, cex.lab = 2.0, cex.main = 2)
+plot(roc_obj2, col = "red",print.auc.x=0.5,
+         print.auc.y=0.45,print.auc=TRUE, add = TRUE,cex.axis = 1.5, cex.lab = 1.5, cex.main = 2)
+plot(roc_obj12, col = "green",print.auc.x=0.5,
+         print.auc.y=0.40,print.auc=TRUE, add = TRUE,cex.axis = 1.5, cex.lab = 1.5, cex.main = 2)
+
+
+
+
+# Customize the legend to adjust height and positioning
+legend("bottomright", legend = c("IgM Seropositivity", "IgA Seropositivity", "Gametocytemia"), 
+       col = c("blue", "red", "green"), lwd = 2, 
+       inset = c(0.00, 0.00), # Adjusts the legend's distance from the border
+       box.lwd = FALSE, # Border width of the legend box
+       cex = 1.5, # Text size
+       title = "Multivariable prediction model",    # Add a title/heading to the legend
+       title.col = "black",
+       y.intersp = 0.9,
+       x.intersp=0.4)  # Controls the vertical space between legend items
+ 
+dev.off()
+```
+
+### roc IgM responses predictor KMLC
+
+```{r}
+
+library(pROC)
+# Predicted probabilities
+prob3 <- predict(bm23, newdata = KMLC_dataset, type = "response")
+
+length(KMLC_dataset$IGMseropositive)
+length(prob3)
+# ROC curve and AUC
+roc_obj <- roc(KMLC_dataset$IGMseropositive, prob3)
+plot(roc_obj)
+auc(roc_obj)
+
+
+```
+
+### roc IgA responses predictor KMLC
+
+```{r}
+
+library(pROC)
+# Predicted probabilities
+prob4 <- predict(bm4, newdata = KMLC_dataset, type = "response")
+# prob3 <- predict(bm3, type = "response")
+ 
+# ROC curve and AUC
+roc_obj <- roc(KMLC_dataset$IGAseropositive, prob4)
+plot(roc_obj)
+auc(roc_obj)
+
+```
+
+### roc gametocytemia responses predictor KMLC
+
+```{r}
+
+library(pROC)
+# Predicted probabilities
+prob5 <- predict(bm13, newdata = KMLC_dataset, type = "response")
+# ROC curve and AUC
+roc_obj <- roc(KMLC_dataset$gametocytepositive, prob5)
+
+plot(roc_obj)
+auc(roc_obj)
+
+```
+
+## KMLC ROC curves
+
+```{r}
+library(pROC)
+# Predicted probabilities
+prob3 <- predict(bm23,newdata = KMLC_dataset, type = "response")
+prob4 <- predict(bm4,newdata = KMLC_dataset, type = "response")
+prob5 <- predict(bm13,newdata = KMLC_dataset, type = "response")
+ 
+
+library(pROC)
+ 
+# ROC curve and AUC
+roc_obj1 <- roc(KMLC_dataset$IGMseropositive, prob3)
+roc_obj2 <- roc(KMLC_dataset$IGAseropositive, prob4)
+roc_obj12 <- roc(KMLC_dataset$gametocytepositive, prob5)
+
+# auc(roc_obj1)
+# auc(roc_obj2)
+# auc(roc_obj12)
+
+# Calculate 95% confidence intervals for each ROC curve
+ci_obj1 <- ci(roc_obj1, conf.level = 0.95)
+ci_obj2 <- ci(roc_obj2, conf.level = 0.95)
+ci_obj12 <- ci(roc_obj12, conf.level = 0.95)
+png("roc_curveKMLC.png", width = 1200,height = 800)
+
+# Example of plotting multiple ROC curves
+plot(roc_obj1, col = "blue",
+        print.auc=TRUE , main = "ROC Curves",cex.axis = 2.0, cex.lab = 2.0, cex.main = 2)
+plot(roc_obj2, col = "red",print.auc.x=0.5,
+         print.auc.y=0.45,print.auc=TRUE, add = TRUE,cex.axis = 1.5, cex.lab = 1.5, cex.main = 2)
+plot(roc_obj12, col = "green",print.auc.x=0.5,
+         print.auc.y=0.40,print.auc=TRUE, add = TRUE,cex.axis = 1.5, cex.lab = 1.5, cex.main = 2)
+
+
+
+
+# Customize the legend to adjust height and positioning
+legend("bottomright", legend = c("IgM Seropositivity", "IgA Seropositivity", "Gametocytemia"), 
+       col = c("blue", "red", "green"), lwd = 2, 
+       inset = c(0.00, 0.00), # Adjusts the legend's distance from the border
+       box.lwd = FALSE, # Border width of the legend box
+       cex = 1.5, # Text size
+       title = "Multivariable prediction model",    # Add a title/heading to the legend
+       title.col = "black",
+       y.intersp = 0.9,
+       x.intersp=0.4)  # Controls the vertical space between legend items
+ 
+dev.off()
+```
+
+## Barplot AFIRM IgM seropositivity age and season
+
+```{r}
+# Step 1: Filter the dataset for IGM seropositive cases
+igm_fil <- afirm_dataset %>%
+  filter(IGMseropositive %in% "1")
+
+# Step 2: Summarize counts by season and age groups
+age_season <- igm_fil %>%
+  group_by(season,Age) %>%
+  summarise(count = n(), .groups = 'drop') 
+
+# Ensure that 'age_groups2' is a factor with the correct levels
+age_season$Age<- factor(age_season$Age,
+                                 levels = c("<5 Yrs", "5-9 Yrs", "10-15 Yrs", ">15 Yrs"))
+
+# Step 3: Calculate proportions for each age group within each season
+prop_age_season <- age_season %>%
+  group_by(season) %>%
+  mutate(total_season = sum(count),
+         proportion = count / total_season)
+
+# Step 4: Compute 95% Confidence Intervals using Binomial Proportion
+prop_age_season <- prop_age_season %>%
+  mutate(se = sqrt((proportion * (1 - proportion)) / total_season),  # Standard error
+         lower_ci = proportion - 1.96 * se,  # Lower bound
+         upper_ci = proportion + 1.96 * se)  # Upper bound
+
+# Convert proportions to percentages
+prop_age_season <- prop_age_season %>%
+  mutate(proportion = proportion * 100,
+         lower_ci = lower_ci * 100,
+         upper_ci = upper_ci * 100)  
+
+# Step 5: Visualize proportions with a bar plot using ggbarplot
+prop_age_season$season <- factor(prop_age_season$season)
+
+
+# Base bar plot
+plot <- ggbarplot(data = prop_age_season, x = "Age", y = "proportion", 
+                  fill = "season", position = position_dodge(width = 0.8)) +
+  ylab("Proportion IGM Seropositivity (%)") +
+  xlab("Age Groups") +
+  theme(axis.text.x = element_text(angle = 360, hjust = 1))
+
+# Step 6: Add red error bars for 95% CI
+plot <- plot + 
+  geom_errorbar(data = prop_age_season, 
+                aes(x = Age, ymin = lower_ci, ymax = upper_ci, group = season), 
+                position = position_dodge(width = 0.8),
+                width = 0.2, color = "red")  # Red error bars
+
+# Step 7: Perform trend test for each season and extract Chi-squared and p-values
+seasons <- unique(prop_age_season$season)
+trend_results <- list()
+
+test_stats <- data.frame(season = character(), 
+                         p_value = numeric(), 
+                         X_squared = numeric())
+
+for (s in seasons) {
+  season_data <- prop_age_season %>%
+    filter(season == s) %>%
+    arrange(Age)  
+  
+  counts <- season_data$count
+  totals <- rep(season_data$total_season[1], nrow(season_data))  
+  scores <- 1:length(unique(season_data$Age)) 
+  
+  trend_test <- prop.trend.test(counts, totals, scores)
+  trend_results[[s]] <- trend_test
+  
+  test_stats <- rbind(test_stats, data.frame(
+    season = s, 
+    p_value = trend_test$p.value, 
+    X_squared = trend_test$statistic
+  ))
+  
+  print(paste("Trend test for season:", s))
+  print(trend_test)
+}
+
+# Step 8: Add Chi-squared statistics and p-values to the plot
+test_stats$label <- paste0(test_stats$season, ": X² = ", 
+                           format(test_stats$X_squared, digits = 2), 
+                           ", p = ", format(test_stats$p_value, digits = 2))
+
+test_stats$y_position <- 1.25 * max(prop_age_season$proportion)
+
+# Annotate plot with test statistics
+plot <- plot + 
+  geom_text(data = test_stats, 
+            aes(x = 1:nrow(test_stats), y = y_position, label = label), 
+            position = position_dodge(width = 1.0), 
+            size = 4, color = "black")
+
+# Display the final plot
+print(plot)
+
+```
+
+## Barplot AFIRM IgA seropositivity age and season
+
+```{r}
+# Step 1: Filter the dataset for IGM seropositive cases
+iga_fil <- afirm_dataset %>%
+  filter(IGAseropositive %in% "1")
+
+# Step 2: Summarize counts by season and age groups
+age_season <- iga_fil %>%
+  group_by(season,Age) %>%
+  summarise(count = n(), .groups = 'drop') 
+
+# Ensure that 'age_groups2' is a factor with the correct levels
+age_season$Age<- factor(age_season$Age,
+                                 levels = c("<5 Yrs", "5-9 Yrs", "10-15 Yrs", ">15 Yrs"))
+
+# Step 3: Calculate proportions for each age group within each season
+prop_age_season <- age_season %>%
+  group_by(season) %>%
+  mutate(total_season = sum(count),
+         proportion = count / total_season)
+
+# Step 4: Compute 95% Confidence Intervals using Binomial Proportion
+prop_age_season <- prop_age_season %>%
+  mutate(se = sqrt((proportion * (1 - proportion)) / total_season),  # Standard error
+         lower_ci = proportion - 1.96 * se,  # Lower bound
+         upper_ci = proportion + 1.96 * se)  # Upper bound
+
+# Convert proportions to percentages
+prop_age_season <- prop_age_season %>%
+  mutate(proportion = proportion * 100,
+         lower_ci = lower_ci * 100,
+         upper_ci = upper_ci * 100)  
+
+# Step 5: Visualize proportions with a bar plot using ggbarplot
+prop_age_season$season <- factor(prop_age_season$season)
+
+
+# Base bar plot
+plot <- ggbarplot(data = prop_age_season, x = "Age", y = "proportion", 
+                  fill = "season", position = position_dodge(width = 0.8)) +
+  ylab("Proportion IGA Seropositivity (%)") +
+  xlab("Age Groups") +
+  theme(axis.text.x = element_text(angle = 360, hjust = 1))
+
+# Step 6: Add red error bars for 95% CI
+plot <- plot + 
+  geom_errorbar(data = prop_age_season, 
+                aes(x = Age, ymin = lower_ci, ymax = upper_ci, group = season), 
+                position = position_dodge(width = 0.8),
+                width = 0.2, color = "red")  # Red error bars
+
+# Step 7: Perform trend test for each season and extract Chi-squared and p-values
+seasons <- unique(prop_age_season$season)
+trend_results <- list()
+
+test_stats <- data.frame(season = character(), 
+                         p_value = numeric(), 
+                         X_squared = numeric())
+
+for (s in seasons) {
+  season_data <- prop_age_season %>%
+    filter(season == s) %>%
+    arrange(Age)  
+  
+  counts <- season_data$count
+  totals <- rep(season_data$total_season[1], nrow(season_data))  
+  scores <- 1:length(unique(season_data$Age)) 
+  
+  trend_test <- prop.trend.test(counts, totals, scores)
+  trend_results[[s]] <- trend_test
+  
+  test_stats <- rbind(test_stats, data.frame(
+    season = s, 
+    p_value = trend_test$p.value, 
+    X_squared = trend_test$statistic
+  ))
+  
+  print(paste("Trend test for season:", s))
+  print(trend_test)
+}
+
+# Step 8: Add Chi-squared statistics and p-values to the plot
+test_stats$label <- paste0(test_stats$season, ": X² = ", 
+                           format(test_stats$X_squared, digits = 2), 
+                           ", p = ", format(test_stats$p_value, digits = 2))
+
+test_stats$y_position <- 1.50 * max(prop_age_season$proportion)
+
+# Annotate plot with test statistics
+plot <- plot + 
+  geom_text(data = test_stats, 
+            aes(x = 1:nrow(test_stats), y = y_position, label = label), 
+            position = position_dodge(width = 1.0), 
+            size = 4, color = "black")
+
+# Display the final plot
+print(plot)
+
+```
+
+## Barplot AFIRM gametocyte positivity age and season
+
+```{r}
+# Step 1: Filter the dataset for IGM seropositive cases
+gam_fil <- afirm_dataset %>%
+  filter(gametocytepositive %in% "1")
+
+# Step 2: Summarize counts by season and age groups
+age_season <- gam_fil %>%
+  group_by(season,Age) %>%
+  summarise(count = n(), .groups = 'drop') 
+
+# Ensure that 'age_groups2' is a factor with the correct levels
+age_season$Age<- factor(age_season$Age,
+                                 levels = c("<5 Yrs", "5-9 Yrs", "10-15 Yrs", ">15 Yrs"))
+
+# Step 3: Calculate proportions for each age group within each season
+prop_age_season <- age_season %>%
+  group_by(season) %>%
+  mutate(total_season = sum(count),
+         proportion = count / total_season)
+
+# Step 4: Compute 95% Confidence Intervals using Binomial Proportion
+prop_age_season <- prop_age_season %>%
+  mutate(se = sqrt((proportion * (1 - proportion)) / total_season),  # Standard error
+         lower_ci = proportion - 1.96 * se,  # Lower bound
+         upper_ci = proportion + 1.96 * se)  # Upper bound
+
+# Convert proportions to percentages
+prop_age_season <- prop_age_season %>%
+  mutate(proportion = proportion * 100,
+         lower_ci = lower_ci * 100,
+         upper_ci = upper_ci * 100)  
+
+# Step 5: Visualize proportions with a bar plot using ggbarplot
+prop_age_season$season <- factor(prop_age_season$season)
+
+
+# Base bar plot
+plot <- ggbarplot(data = prop_age_season, x = "Age", y = "proportion", 
+                  fill = "season", position = position_dodge(width = 0.8)) +
+  ylab("Proportion Gametocyte Seropositivity (%)") +
+  xlab("Age Groups") +
+  theme(axis.text.x = element_text(angle = 360, hjust = 1))
+
+# Step 6: Add red error bars for 95% CI
+plot <- plot + 
+  geom_errorbar(data = prop_age_season, 
+                aes(x = Age, ymin = lower_ci, ymax = upper_ci, group = season), 
+                position = position_dodge(width = 0.8),
+                width = 0.2, color = "red")  # Red error bars
+
+# Step 7: Perform trend test for each season and extract Chi-squared and p-values
+seasons <- unique(prop_age_season$season)
+trend_results <- list()
+
+test_stats <- data.frame(season = character(), 
+                         p_value = numeric(), 
+                         X_squared = numeric())
+
+for (s in seasons) {
+  season_data <- prop_age_season %>%
+    filter(season == s) %>%
+    arrange(Age)  
+  
+  counts <- season_data$count
+  totals <- rep(season_data$total_season[1], nrow(season_data))  
+  scores <- 1:length(unique(season_data$Age)) 
+  
+  trend_test <- prop.trend.test(counts, totals, scores)
+  trend_results[[s]] <- trend_test
+  
+  test_stats <- rbind(test_stats, data.frame(
+    season = s, 
+    p_value = trend_test$p.value, 
+    X_squared = trend_test$statistic
+  ))
+  
+  print(paste("Trend test for season:", s))
+  print(trend_test)
+}
+
+# Step 8: Add Chi-squared statistics and p-values to the plot
+test_stats$label <- paste0(test_stats$season, ": X² = ", 
+                           format(test_stats$X_squared, digits = 2), 
+                           ", p = ", format(test_stats$p_value, digits = 2))
+
+test_stats$y_position <- 1.35* max(prop_age_season$proportion)
+
+# Annotate plot with test statistics
+plot <- plot + 
+  geom_text(data = test_stats, 
+            aes(x = 1:nrow(test_stats), y = y_position, label = label), 
+            position = position_dodge(width = 1.0), 
+            size = 4, color = "black")
+
+# Display the final plot
+print(plot)
+
+```
+
+## Barplot KMLC IgM seropositivity age and cohort
+
+```{r}
+# Step 1: Filter the dataset for IGM seropositive cases
+igm_fil <- KMLC_dataset %>%
+  filter(IGMseropositive %in% "1")
+
+# Step 2: Summarize counts by season and age groups
+age_site <- igm_fil %>%
+  group_by(cohort2,Age) %>%
+  summarise(count = n(), .groups = 'drop') 
+
+# Ensure that 'age_groups2' is a factor with the correct levels
+age_site$Age<- factor(age_site$Age,
+                                 levels = c("<5 Yrs", "5-9 Yrs", "10-15 Yrs" ))
+
+# Step 3: Calculate proportions for each age group within each season
+prop_age_site <- age_site %>%
+  group_by(cohort2) %>%
+  mutate(total_site = sum(count),
+         proportion = count / total_site)
+
+# Step 4: Compute 95% Confidence Intervals using Binomial Proportion
+prop_age_site <- prop_age_site %>%
+  mutate(se = sqrt((proportion * (1 - proportion)) / total_site),  # Standard error
+         lower_ci = proportion - 1.96 * se,  # Lower bound
+         upper_ci = proportion + 1.96 * se)  # Upper bound
+
+# Convert proportions to percentages
+prop_age_site <- prop_age_site %>%
+  mutate(proportion = proportion * 100,
+         lower_ci = lower_ci * 100,
+         upper_ci = upper_ci * 100)  
+
+# Step 5: Visualize proportions with a bar plot using ggbarplot
+prop_age_site$cohort2 <- factor(prop_age_site$cohort2)
+
+
+# Base bar plot
+plot <- ggbarplot(data = prop_age_site, x = "Age", y = "proportion", 
+                  fill = "cohort2", position = position_dodge(width = 0.8)) +
+  ylab("Proportion IGM Seropositivity (%)") +
+  xlab("Age Groups") +
+  theme(axis.text.x = element_text(angle = 360, hjust = 1))
+
+# Step 6: Add red error bars for 95% CI
+plot <- plot + 
+  geom_errorbar(data = prop_age_site, 
+                aes(x = Age, ymin = lower_ci, ymax = upper_ci, group = cohort2), 
+                position = position_dodge(width = 0.8),
+                width = 0.2, color = "red")  # Red error bars
+
+# Step 7: Perform trend test for each season and extract Chi-squared and p-values
+sites <- unique(prop_age_site$cohort2)
+trend_results <- list()
+
+test_stats <- data.frame(cohort2 = character(), 
+                         p_value = numeric(), 
+                         X_squared = numeric())
+
+for (s in sites) {
+  site_data <- prop_age_site %>%
+    filter(cohort2 == s) %>%
+    arrange(Age)  
+  
+  counts <- site_data$count
+  totals <- rep(site_data$total_site[1], nrow(site_data))  
+  scores <- 1:length(unique(site_data$Age)) 
+  
+  trend_test <- prop.trend.test(counts, totals, scores)
+  trend_results[[s]] <- trend_test
+  
+  test_stats <- rbind(test_stats, data.frame(
+    cohort2 = s, 
+    p_value = trend_test$p.value, 
+    X_squared = trend_test$statistic
+  ))
+  
+  print(paste("Trend test for site:", s))
+  print(trend_test)
+}
+
+# Step 8: Add Chi-squared statistics and p-values to the plot
+test_stats$label <- paste0(test_stats$cohort2, ": X² = ", 
+                           format(test_stats$X_squared, digits = 2), 
+                           ", p = ", format(test_stats$p_value, digits = 2))
+
+test_stats$y_position <- 1.80 * max(prop_age_site$proportion)
+
+# Annotate plot with test statistics
+plot <- plot + 
+  geom_text(data = test_stats, 
+            aes(x = 1:nrow(test_stats), y = y_position, label = label), 
+            position = position_dodge(width = 0.8), 
+            size = 4, color = "black")
+
+# Display the final plot
+print(plot)
+
+```
+
+## Barplot KMLC IgA seropositivity age and cohort
+
+```{r}
+# Step 1: Filter the dataset for IGM seropositive cases
+iga_fil <- KMLC_dataset %>%
+  filter(IGAseropositive %in% "1")
+
+# Step 2: Summarize counts by season and age groups
+age_site <- iga_fil %>%
+  group_by(cohort2,Age) %>%
+  summarise(count = n(), .groups = 'drop') 
+
+# Ensure that 'age_groups2' is a factor with the correct levels
+age_site$Age<- factor(age_site$Age,
+                                 levels = c("<5 Yrs", "5-9 Yrs", "10-15 Yrs" ))
+
+# Step 3: Calculate proportions for each age group within each season
+prop_age_site <- age_site %>%
+  group_by(cohort2) %>%
+  mutate(total_site = sum(count),
+         proportion = count / total_site)
+
+# Step 4: Compute 95% Confidence Intervals using Binomial Proportion
+prop_age_site <- prop_age_site %>%
+  mutate(se = sqrt((proportion * (1 - proportion)) / total_site),  # Standard error
+         lower_ci = proportion - 1.96 * se,  # Lower bound
+         upper_ci = proportion + 1.96 * se)  # Upper bound
+
+# Convert proportions to percentages
+prop_age_site <- prop_age_site %>%
+  mutate(proportion = proportion * 100,
+         lower_ci = lower_ci * 100,
+         upper_ci = upper_ci * 100)  
+
+# Step 5: Visualize proportions with a bar plot using ggbarplot
+prop_age_site$cohort2 <- factor(prop_age_site$cohort2)
+
+
+# Base bar plot
+plot <- ggbarplot(data = prop_age_site, x = "Age", y = "proportion", 
+                  fill = "cohort2", position = position_dodge(width = 0.8)) +
+  ylab("Proportion IGA Seropositivity (%)") +
+  xlab("Age Groups") +
+  theme(axis.text.x = element_text(angle = 360, hjust = 1))
+
+# Step 6: Add red error bars for 95% CI
+plot <- plot + 
+  geom_errorbar(data = prop_age_site, 
+                aes(x = Age, ymin = lower_ci, ymax = upper_ci, group = cohort2), 
+                position = position_dodge(width = 0.8),
+                width = 0.2, color = "red")  # Red error bars
+
+# Step 7: Perform trend test for each season and extract Chi-squared and p-values
+sites <- unique(prop_age_site$cohort2)
+trend_results <- list()
+
+test_stats <- data.frame(cohort2 = character(), 
+                         p_value = numeric(), 
+                         X_squared = numeric())
+
+for (s in sites) {
+  site_data <- prop_age_site %>%
+    filter(cohort2 == s) %>%
+    arrange(Age)  
+  
+  counts <- site_data$count
+  totals <- rep(site_data$total_site[1], nrow(site_data))  
+  scores <- 1:length(unique(site_data$Age)) 
+  
+  trend_test <- prop.trend.test(counts, totals, scores)
+  trend_results[[s]] <- trend_test
+  
+  test_stats <- rbind(test_stats, data.frame(
+    cohort2 = s, 
+    p_value = trend_test$p.value, 
+    X_squared = trend_test$statistic
+  ))
+  
+  print(paste("Trend test for site:", s))
+  print(trend_test)
+}
+
+# Step 8: Add Chi-squared statistics and p-values to the plot
+test_stats$label <- paste0(test_stats$cohort2, ": X² = ", 
+                           format(test_stats$X_squared, digits = 2), 
+                           ", p = ", format(test_stats$p_value, digits = 2))
+
+test_stats$y_position <- 1.80* max(prop_age_site$proportion)
+
+# Annotate plot with test statistics
+plot <- plot + 
+  geom_text(data = test_stats, 
+            aes(x = 1:nrow(test_stats), y = y_position, label = label), 
+            position = position_dodge(width = 1.0), 
+            size = 4, color = "black")
+
+# Display the final plot
+print(plot)
+
+```
+
+## Barplot KMLC gametocyte seropositivity age and cohort
+
+```{r}
+# Step 1: Filter the dataset for IGM seropositive cases
+gam_fil <- KMLC_dataset %>%
+  filter(gametocytepositive %in% "1")
+
+# Step 2: Summarize counts by season and age groups
+age_site <- gam_fil %>%
+  group_by(cohort2,Age) %>%
+  summarise(count = n(), .groups = 'drop') 
+
+# Ensure that 'age_groups2' is a factor with the correct levels
+age_site$Age<- factor(age_site$Age,
+                                 levels = c("<5 Yrs", "5-9 Yrs", "10-15 Yrs" ))
+
+# Step 3: Calculate proportions for each age group within each season
+prop_age_site <- age_site %>%
+  group_by(cohort2) %>%
+  mutate(total_site = sum(count),
+         proportion = count / total_site)
+
+# Step 4: Compute 95% Confidence Intervals using Binomial Proportion
+prop_age_site <- prop_age_site %>%
+  mutate(se = sqrt((proportion * (1 - proportion)) / total_site),  # Standard error
+         lower_ci = proportion - 1.96 * se,  # Lower bound
+         upper_ci = proportion + 1.96 * se)  # Upper bound
+
+# Convert proportions to percentages
+prop_age_site <- prop_age_site %>%
+  mutate(proportion = proportion * 100,
+         lower_ci = lower_ci * 100,
+         upper_ci = upper_ci * 100)  
+
+# Step 5: Visualize proportions with a bar plot using ggbarplot
+prop_age_site$cohort2 <- factor(prop_age_site$cohort2)
+
+
+# Base bar plot
+plot <- ggbarplot(data = prop_age_site, x = "Age", y = "proportion", 
+                  fill = "cohort2", position = position_dodge(width = 0.8)) +
+  ylab("Proportion Gametocyte Seropositivity (%)") +
+  xlab("Age Groups") +
+  theme(axis.text.x = element_text(angle = 360, hjust = 1))
+
+# Step 6: Add red error bars for 95% CI
+plot <- plot + 
+  geom_errorbar(data = prop_age_site, 
+                aes(x = Age, ymin = lower_ci, ymax = upper_ci, group = cohort2), 
+                position = position_dodge(width = 0.8),
+                width = 0.2, color = "red")  # Red error bars
+
+# Step 7: Perform trend test for each season and extract Chi-squared and p-values
+sites <- unique(prop_age_site$cohort2)
+trend_results <- list()
+
+test_stats <- data.frame(cohort2 = character(), 
+                         p_value = numeric(), 
+                         X_squared = numeric())
+
+for (s in sites) {
+  site_data <- prop_age_site %>%
+    filter(cohort2 == s) %>%
+    arrange(Age)  
+  
+  counts <- site_data$count
+  totals <- rep(site_data$total_site[1], nrow(site_data))  
+  scores <- 1:length(unique(site_data$Age)) 
+  
+  trend_test <- prop.trend.test(counts, totals, scores)
+  trend_results[[s]] <- trend_test
+  
+  test_stats <- rbind(test_stats, data.frame(
+    cohort2 = s, 
+    p_value = trend_test$p.value, 
+    X_squared = trend_test$statistic
+  ))
+  
+  print(paste("Trend test for site:", s))
+  print(trend_test)
+}
+
+# Step 8: Add Chi-squared statistics and p-values to the plot
+test_stats$label <- paste0(test_stats$cohort2, ": X² = ", 
+                           format(test_stats$X_squared, digits = 2), 
+                           ", p = ", format(test_stats$p_value, digits = 2))
+
+test_stats$y_position <- 1.80 * max(prop_age_site$proportion)
+
+# Annotate plot with test statistics
+plot <- plot + 
+  geom_text(data = test_stats, 
+            aes(x = 1:nrow(test_stats), y = y_position, label = label), 
+            position = position_dodge(width = 0.8), 
+            size = 4, color = "black")
+
+# Display the final plot
+print(plot)
+
+```
+
+## combined afirm
+
+```{r}
+library(tidyverse)
+library(ggpubr)
+# Install ggsci if you haven't already
+# install.packages("ggsci")
+library(ggsci)
+
+# Assuming your 'afirm_dataset' dataframe exists
+
+# --- Plot 1: Asexual Parasitemia ---
+my_comparisations9 <- list(c("Parasitemia +ve", "Parasitemia -ve"))
+
+new_pivot_asexual <- afirm_dataset %>%
+  pivot_longer(ends_with("log"),
+               names_to = 'Ig',
+               values_to = 'Value') %>%
+  select(c(Ig, Value, asexualpar)) %>%
+  mutate(Ig = ifelse(Ig == "IgA_log", "IgA", Ig),
+         Ig = ifelse(Ig == "Igm_log", "IgM", Ig))
+
+cut_offs <- c("IgM" = 4.169212, "IgA" = 4.534828)
+
+plot_asexual <- ggplot(new_pivot_asexual, aes(x = asexualpar, y = Value, color = asexualpar)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(width = 0.2) +
+  scale_color_npg() +
+  facet_wrap(~Ig) +
+  stat_compare_means(
+    aes(label = paste0(after_stat(method), ", p-value = ", after_stat(p.format))),
+    method = "t.test",
+    label.y = max(new_pivot_asexual$Value, na.rm = TRUE) + 1
+  ) +
+  stat_compare_means(comparisons = my_comparisations9, method = "t.test", label = "p.signif", p.adjust.method = "bonferroni") +
+  geom_hline(aes(yintercept = cut_offs[Ig]), linetype = 2, linewidth = 0.9, color = "red") +
+  labs(title = "", x = "Malaria status", y = "Log-transformed ELISA units") +
+  theme_pubr(legend = "none") +
+  theme(text = element_text(size = 14)) # Adjusted text size for combined plot
+
+
+# --- Plot 2: Gametocyte Positivity ---
+my_comparisations7 <- list(c("Gametocyte +ve", "Gametocyte -ve"))
+
+new_pivot_gametocyte <- afirm_dataset %>%
+  pivot_longer(ends_with("log"),
+               names_to = 'Ig',
+               values_to = 'Value') %>%
+  select(c(Ig, Value, gametocytepositive)) %>%
+  mutate(Ig = ifelse(Ig == "IgA_log", "IgA", Ig),
+         Ig = ifelse(Ig == "Igm_log", "IgM", Ig))
+
+plot_gametocyte <- ggplot(new_pivot_gametocyte, aes(x = gametocytepositive, y = Value, color = gametocytepositive)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(width = 0.2) +
+  scale_color_npg() +
+  facet_wrap(~Ig) +
+  stat_compare_means(
+    aes(label = paste0(after_stat(method), ", p-value = ", after_stat(p.format))),
+    method = "t.test",
+    label.y = max(new_pivot_gametocyte$Value, na.rm = TRUE) + 1
+  ) +
+  stat_compare_means(comparisons = my_comparisations7, method = "t.test", label = "p.signif", p.adjust.method = "bonferroni") +
+  geom_hline(aes(yintercept = cut_offs[Ig]), linetype = 2, linewidth = 0.9, color = "red") +
+  labs(title = "", x = "Gametocyte status", y = "Log-transformed ELISA units") +
+  theme_pubr(legend = "none") +
+  theme(text = element_text(size = 14)) # Adjusted text size for combined plot
+
+
+# --- Plot 3: Age Groups ---
+my_comparisations1_age <- list(c("<5 Yrs", "5-9 Yrs"), c("<5 Yrs", "10-15 Yrs"), c("<5 Yrs", ">15 Yrs"),
+                             c("5-9 Yrs", "10-15 Yrs"), c("5-9 Yrs", ">15 Yrs"), c("10-15 Yrs", ">15 Yrs"))
+
+new_pivot_age_combined <- afirm_dataset %>%
+  pivot_longer(ends_with("log"),
+               names_to = 'Ig',
+               values_to = 'Value') %>%
+  select(c(Ig, Value, Age)) %>%
+  mutate(Ig = ifelse(Ig == "IgA_log", "IgA", Ig),
+         Ig = ifelse(Ig == "Igm_log", "IgM", Ig))
+
+t_test_p7_combined <- compare_means(Value ~ Age,
+                                     group.by = "Ig",
+                                     comparisons = my_comparisations1_age,
+                                     p.adjust.method = "bonferroni",
+                                     method = "t.test",
+                                     data = new_pivot_age_combined) %>%
+  rstatix::add_significance(p.col = "p.adj") %>%
+  mutate(y.position = rep(c(6.0, 6.8, 7.6, 8.4, 9.2, 10.2), 2))
+
+plot_age <- ggplot(new_pivot_age_combined, aes(x = Age, y = Value, color = Age)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(width = 0.2) +
+  scale_color_npg() +
+  facet_wrap(~Ig) +
+  stat_compare_means(aes(label = paste0(after_stat(method), ", p-value = ", after_stat(p.format))),
+                       method = "anova", label.y = max(new_pivot_age_combined$Value, na.rm = TRUE) + 15) +
+  stat_pvalue_manual(t_test_p7_combined, label = "p.adj.signif", tip.length = 0.01, step.increase = 0.1) +
+  geom_hline(aes(yintercept = cut_offs[Ig]), linetype = 2, linewidth = 0.9, color = "red") +
+  labs(title = "", x = "Age", y = "Log-transformed ELISA units") +
+  theme_pubr(legend = "none") +
+  theme(text = element_text(size = 14)) # Adjusted text size for combined plot
+
+
+# --- Plot 4: Season ---
+my_comparisations1_season <- list(c("Dry", "Wet"))
+
+new_pivot_season <- afirm_dataset %>%
+  pivot_longer(ends_with("log"),
+               names_to = 'Ig',
+               values_to = 'Value') %>%
+  select(c(Ig, Value, season)) %>%
+  mutate(Ig = ifelse(Ig == "IgA_log", "IgA", Ig),
+         Ig = ifelse(Ig == "Igm_log", "IgM", Ig))
+
+plot_season <- ggplot(new_pivot_season, aes(x = season, y = Value, color = season)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(width = 0.2) +
+  scale_color_npg() +
+  facet_wrap(~Ig) +
+  stat_compare_means(
+    aes(label = paste0(after_stat(method), ", p-value = ", after_stat(p.format))),
+    method = "t.test",
+    label.y = max(new_pivot_season$Value, na.rm = TRUE) + 1
+  ) +
+  stat_compare_means(comparisons = my_comparisations1_season, method = "t.test", label = "p.signif", p.adjust.method = "bonferroni") +
+  geom_hline(aes(yintercept = cut_offs[Ig]), linetype = 2, linewidth = 0.9, color = "red") +
+  labs(title = "", x = "Season", y = "Log-transformed ELISA units") +
+  theme_pubr(legend = "none") +
+  theme(text = element_text(size = 14)) # Adjusted text size for combined plot
+  
+
+# --- Combine the plots ---
+combined_plot <- ggarrange(plot_asexual, plot_gametocyte, plot_age, plot_season,
+                          nrow = 2, ncol = 2, labels = c("A", "B", "C", "D"))
+
+print(combined_plot)
+```
+
+##combined kmlc
+
+```{r}
+library(tidyverse)
+library(ggpubr)
+library(ggsci)
+library(rstatix)
+
+# Assuming your 'KMLC_dataset' dataframe exists
+
+# --- Plot 1: Asexual Parasitemia ---
+my_comparisations9 <- list(c("Parasitemia +ve", "Parasitemia -ve"))
+
+new_pivot_asexual <- KMLC_dataset %>%
+  pivot_longer(c(IgM_log, IgA_log),
+               names_to = 'Ig',
+               values_to = 'Value') %>%
+  select(c(Ig, Value, asexualparas)) %>%
+  mutate(Ig = ifelse(Ig == "IgA_log", "IgA", Ig),
+         Ig = ifelse(Ig == "IgM_log", "IgM", Ig))
+
+cut_offs <- c("IgM" = 4.169212, "IgA" = 4.534828)
+
+plot_asexual <- ggplot(new_pivot_asexual, aes(x = asexualparas, y = Value, color = asexualparas)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(width = 0.2) +
+  scale_color_npg() +
+  facet_wrap(~Ig) +
+  stat_compare_means(
+    aes(label = paste0(after_stat(method), ", p-value = ", after_stat(p.format))),
+    method = "wilcox.test",
+    label.y = max(new_pivot_asexual$Value, na.rm = TRUE) + 1.5
+  ) +
+stat_compare_means(comparisons = my_comparisations9, method = "wilcox.test", label = "p.signif", p.adjust.method = "bonferroni", y.position = 4) +
+  geom_hline(aes(yintercept = cut_offs[Ig]), linetype = 2, linewidth = 0.9, color = "red") +
+  labs(title = "", x = "Malaria status", y = "Log-transformed ELISA units") +
+  theme_pubr(legend = "none") +
+  theme(text = element_text(size = 14)) # Adjusted text size
+
+
+# --- Plot 2: Gametocyte Positivity ---
+my_comparisations8 <- list(c("Gametocyte +ve", "Gametocyte -ve"))
+
+new_pivot_gametocyte <- KMLC_dataset %>%
+  pivot_longer(c(IgM_log, IgA_log),
+               names_to = 'Ig',
+               values_to = 'Value') %>%
+  select(c(Ig, Value, gametocytepositive)) %>%
+  mutate(Ig = ifelse(Ig == "IgA_log", "IgA", Ig),
+         Ig = ifelse(Ig == "IgM_log", "IgM", Ig))
+
+plot_gametocyte <- ggplot(new_pivot_gametocyte, aes(x = gametocytepositive, y = Value, color = gametocytepositive)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(width = 0.2) +
+  scale_color_npg() +
+  facet_wrap(~Ig) +
+  stat_compare_means(
+    aes(label = paste0(after_stat(method), ", p-value = ", after_stat(p.format))),
+    method = "wilcox.test",
+    label.y = max(new_pivot_gametocyte$Value, na.rm = TRUE) + 1.5
+  ) +
+  stat_compare_means(comparisons = my_comparisations8, method = "wilcox.test", label = "p.signif", p.adjust.method = "bonferroni",, y.position = 4) +
+  geom_hline(aes(yintercept = cut_offs[Ig]), linetype = 2, linewidth = 0.9, color = "red") +
+  labs(title = "", x = "Gametocyte status", y = "Log-transformed ELISA units") +
+  theme_pubr(legend = "none") +
+  theme(text = element_text(size = 14)) # Adjusted text size
+
+
+# --- Plot 3: Age Groups ---
+my_comparisations3 <- list(c("<5 Yrs", "5-9 Yrs"), c("<5 Yrs", "10-15 Yrs"), c("5-9 Yrs", "10-15 Yrs"))
+
+KMLC_new_pivot1_combined <- KMLC_dataset %>%
+  pivot_longer(cols = c("IgA_log", "IgM_log"),
+               names_to = 'Ig',
+               values_to = 'Value') %>%
+  select(c(Ig, Value, Age)) %>%
+  mutate(Ig = ifelse(Ig == "IgA_log", "IgA", Ig),
+         Ig = ifelse(Ig == "IgM_log", "IgM", Ig))
+
+pwc2_combined <- KMLC_new_pivot1_combined %>%
+  group_by(Ig) %>%
+  dunn_test(Value ~ Age,
+            p.adjust.method = "bonferroni") %>%
+  rstatix::add_significance(p.col = "p.adj") %>%
+  mutate(y.position = rep(c(10.2, 11.0, 11.8), 2)) %>%
+  mutate(p.adj = round(p.adj, 4))
+
+plot_age <- ggplot(KMLC_new_pivot1_combined, aes(x = Age, y = Value, color = Age)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(width = 0.2) +
+  scale_color_npg() +
+  facet_wrap(~Ig) +
+  stat_compare_means(aes(label = paste0(after_stat(method), ", p-value = ", after_stat(p.format))),
+                       method = "kruskal.test", label.y = max(KMLC_new_pivot1_combined$Value, na.rm = TRUE) + 12) +
+  stat_pvalue_manual(pwc2_combined, label = "p.adj.signif", tip.length = 0.01, step.increase = 0.1) +
+  geom_hline(aes(yintercept = cut_offs[Ig]), linetype = 2, linewidth = 0.9, color = "red") +
+  labs(title = "", x = "Age Groups", y = "Log-transformed ELISA units") +
+  theme_pubr(legend = "none") +
+  theme(text = element_text(size = 14)) # Adjusted text size
+
+
+# --- Plot 4: Cohort ---
+my_comparisations2 <- list(c("Junju", "Ngerenya Early"), c("Junju", "Ngerenya Late"), c("Ngerenya Early", "Ngerenya Late"))
+
+KMLC_new_pivot_cohort <- KMLC_dataset %>%
+  pivot_longer(cols = c("IgA_log", "IgM_log"),
+               names_to = 'Ig',
+               values_to = 'Value') %>%
+  select(c(Ig, Value, cohort2)) %>%
+  mutate(Ig = ifelse(Ig == "IgA_log", "IgA", Ig),
+         Ig = ifelse(Ig == "IgM_log", "IgM", Ig))
+
+pwc_cohort <- KMLC_new_pivot_cohort %>%
+  group_by(Ig) %>%
+  dunn_test(Value ~ cohort2,
+            p.adjust.method = "bonferroni") %>%
+  rstatix::add_significance(p.col = "p.adj") %>%
+  mutate(y.position = rep(c(10.2, 11.0, 11.8), 2)) %>%
+  mutate(p.adj = round(p.adj, 4))
+
+plot_cohort <- ggplot(KMLC_new_pivot_cohort, aes(x = cohort2, y = Value, color = cohort2)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(width = 0.2) +
+  scale_color_npg() +
+  facet_wrap(~Ig) +
+  stat_compare_means(aes(label = paste0(after_stat(method), ", p-value = ", after_stat(p.format))),
+                       method = "kruskal.test", label.y = max(KMLC_new_pivot_cohort$Value, na.rm = TRUE) + 12) +
+  stat_pvalue_manual(pwc_cohort, label = "p.adj.signif", comparisons = my_comparisations2, tip.length = 0.01, step.increase = 0.1) +
+  geom_hline(aes(yintercept = cut_offs[Ig]), linetype = 2, linewidth = 0.9, color = "red") +
+  labs(title = "", x = "Transmission setting", y = "Log-transformed ELISA units") +
+  theme_pubr(legend = "none") +
+  theme(text = element_text(size = 12)) # Adjusted text size
+
+
+# --- Combine the plots ---
+combined_plot <- ggarrange(plot_asexual, plot_gametocyte, plot_age, plot_cohort,
+                          nrow = 2, ncol = 2, labels = c("A", "B", "C", "D"))
+
+print(combined_plot)
+```
+
+### correlation btw iga igm
+
+```{r}
+library(tidyverse)
+library(ggpubr)
+
+# Assuming your 'afirm_dataset' and 'KMLC_dataset' dataframes exist
+
+# --- Plot 1: afirm_dataset scatter plot ---
+plot_scatter_afirm <- ggscatter(afirm_dataset, x = "Igm_log", y ="IgA_log",
+                                add = "reg.line",  # Add regressin line
+                                add.params = list(color = "blue", fill = "lightgray"), # Customize reg. line
+                                conf.int = TRUE, # Add confidence interval
+                                cor.coef = TRUE, # Add correlation coefficient. see ?stat_cor
+                                cor.coeff.args = list(method = "pearson", label.y=2, label.x =7,
+                                                      label.sep = "\n")) +
+  labs(x = "Log-transformed IgM ELISA Units", y = "Log-transformed IgA ELISA Units", title = "AFIRM cohort") +
+  theme(text = element_text(size = 14)) # Adjusted text size for combined plot
+
+# --- Plot 2: KMLC_dataset scatter plot ---
+plot_scatter_kmlc <- ggscatter(KMLC_dataset, x = "IgM_log", y ="IgA_log",
+                                add = "reg.line",  # Add regressin line
+                                add.params = list(color = "blue", fill = "lightgray"), # Customize reg. line
+                                conf.int = TRUE, # Add confidence interval
+                                cor.coef = TRUE, # Add correlation coefficient. see ?stat_cor
+                                cor.coeff.args = list(method = "pearson", label.y=7.5, label.x =6,
+                                                      label.sep = "\n")) +
+  labs(x = "Log-transformed IgM ELISA Units", y = "Log-transformed IgA ELISA Units", title = "KMLC cohort") +
+  theme(text = element_text(size = 14)) # Adjusted text size for combined plot
+
+# --- Combine the plots side by side (1 row, 2 columns) ---
+combined_scatter <- ggarrange(plot_scatter_afirm, plot_scatter_kmlc,
+                              nrow = 1, ncol = 2)
+
+print(combined_scatter)
+
+# --- Alternatively, combine them in 2 rows, 1 column ---
+combined_scatter_vertical <- ggarrange(plot_scatter_afirm, plot_scatter_kmlc,
+                                       nrow = 2, ncol = 1)
+
+# print(combined_scatter_vertical)
+```
+
+
+```{r}
+# Load required libraries
+library(tidyverse)
+library(ggpubr)
+library(ggsci)
+library(rstatix)
+
+# Define cutoff values
+cut_offs <- c("IgM" = 4.169212, "IgA" = 4.534828)
+
+# --- Plot 1: Asexual Parasitemia ---
+my_comparisations9 <- list(c("Parasitemia +ve", "Parasitemia -ve"))
+
+new_pivot_asexual <- afirm_dataset %>%
+  pivot_longer(ends_with("log"), names_to = 'Ig', values_to = 'Value') %>%
+  select(Ig, Value, asexualpar) %>%
+  mutate(Ig = ifelse(Ig == "IgA_log", "IgA", Ig),
+         Ig = ifelse(Ig == "Igm_log", "IgM", Ig))
+
+plot_asexual <- ggplot(new_pivot_asexual, aes(x = asexualpar, y = Value, color = asexualpar)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(width = 0.2) +
+  scale_color_npg() +
+  facet_wrap(~Ig) +
+  stat_compare_means(aes(label = paste0(after_stat(method), ", p-value = ", after_stat(p.format))),
+                     method = "t.test", label.y = max(new_pivot_asexual$Value, na.rm = TRUE) + 1) +
+  stat_compare_means(comparisons = my_comparisations9, method = "t.test",
+                     label = "p.signif", p.adjust.method = "bonferroni") +
+  geom_hline(aes(yintercept = cut_offs[Ig]), linetype = 2, linewidth = 0.9, color = "red") +
+  labs(title = "", x = "Malaria status", y = "Log-transformed ELISA units") +
+  theme_pubr(legend = "none") +
+  theme(text = element_text(size = 14))
+
+
+# --- Plot 2: Gametocyte Positivity ---
+my_comparisations7 <- list(c("Gametocyte +ve", "Gametocyte -ve"))
+
+new_pivot_gametocyte <- afirm_dataset %>%
+  pivot_longer(ends_with("log"), names_to = 'Ig', values_to = 'Value') %>%
+  select(Ig, Value, gametocytepositive) %>%
+  mutate(Ig = ifelse(Ig == "IgA_log", "IgA", Ig),
+         Ig = ifelse(Ig == "Igm_log", "IgM", Ig))
+
+plot_gametocyte <- ggplot(new_pivot_gametocyte, aes(x = gametocytepositive, y = Value, color = gametocytepositive)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(width = 0.2) +
+  scale_color_npg() +
+  facet_wrap(~Ig) +
+  stat_compare_means(aes(label = paste0(after_stat(method), ", p-value = ", after_stat(p.format))),
+                     method = "t.test", label.y = max(new_pivot_gametocyte$Value, na.rm = TRUE) + 1) +
+  stat_compare_means(comparisons = my_comparisations7, method = "t.test",
+                     label = "p.signif", p.adjust.method = "bonferroni") +
+  geom_hline(aes(yintercept = cut_offs[Ig]), linetype = 2, linewidth = 0.9, color = "red") +
+  labs(title = "", x = "Gametocyte status", y = "Log-transformed ELISA units") +
+  theme_pubr(legend = "none") +
+  theme(text = element_text(size = 14))
+
+
+# --- Plot 3: Age Groups ---
+my_comparisations1_age <- list(c("<5 Yrs", "5-9 Yrs"), c("<5 Yrs", "10-15 Yrs"), c("<5 Yrs", ">15 Yrs"),
+                               c("5-9 Yrs", "10-15 Yrs"), c("5-9 Yrs", ">15 Yrs"), c("10-15 Yrs", ">15 Yrs"))
+
+new_pivot_age_combined <- afirm_dataset %>%
+  pivot_longer(ends_with("log"), names_to = 'Ig', values_to = 'Value') %>%
+  select(Ig, Value, Age) %>%
+  mutate(Ig = ifelse(Ig == "IgA_log", "IgA", Ig),
+         Ig = ifelse(Ig == "Igm_log", "IgM", Ig))
+
+t_test_p7_combined <- compare_means(Value ~ Age, group.by = "Ig",
+                                    comparisons = my_comparisations1_age,
+                                    p.adjust.method = "bonferroni",
+                                    method = "t.test",
+                                    data = new_pivot_age_combined) %>%
+  rstatix::add_significance(p.col = "p.adj") %>%
+  mutate(y.position = rep(c(6.0, 6.8, 7.6, 8.4, 9.2, 10.2), 2))
+
+plot_age <- ggplot(new_pivot_age_combined, aes(x = Age, y = Value, color = Age)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(width = 0.2) +
+  scale_color_npg() +
+  facet_wrap(~Ig) +
+  stat_compare_means(aes(label = paste0(after_stat(method), ", p-value = ", after_stat(p.format))),
+                     method = "anova", label.y = max(new_pivot_age_combined$Value, na.rm = TRUE) + 15) +
+  stat_pvalue_manual(t_test_p7_combined, label = "p.adj.signif", tip.length = 0.01, step.increase = 0.1) +
+  geom_hline(aes(yintercept = cut_offs[Ig]), linetype = 2, linewidth = 0.9, color = "red") +
+  labs(title = "", x = "Age", y = "Log-transformed ELISA units") +
+  theme_pubr(legend = "none") +
+  theme(text = element_text(size = 14))
+
+
+# --- Plot 4: Season ---
+my_comparisations1_season <- list(c("Dry", "Wet"))
+
+new_pivot_season <- afirm_dataset %>%
+  pivot_longer(ends_with("log"), names_to = 'Ig', values_to = 'Value') %>%
+  select(Ig, Value, season) %>%
+  mutate(Ig = ifelse(Ig == "IgA_log", "IgA", Ig),
+         Ig = ifelse(Ig == "Igm_log", "IgM", Ig))
+
+plot_season <- ggplot(new_pivot_season, aes(x = season, y = Value, color = season)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(width = 0.2) +
+  scale_color_npg() +
+  facet_wrap(~Ig) +
+  stat_compare_means(aes(label = paste0(after_stat(method), ", p-value = ", after_stat(p.format))),
+                     method = "t.test", label.y = max(new_pivot_season$Value, na.rm = TRUE) + 1) +
+  stat_compare_means(comparisons = my_comparisations1_season, method = "t.test",
+                     label = "p.signif", p.adjust.method = "bonferroni") +
+  geom_hline(aes(yintercept = cut_offs[Ig]), linetype = 2, linewidth = 0.9, color = "red") +
+  labs(title = "", x = "Season", y = "Log-transformed ELISA units") +
+  theme_pubr(legend = "none") +
+  theme(text = element_text(size = 14))
+
+
+# --- Combine All Plots ---
+combined_plot <- ggarrange(
+  plot_asexual, plot_gametocyte,
+  plot_age, plot_season,
+  labels = c("A", "B", "C", "D"),
+  ncol = 2, nrow = 2,
+  align = "hv"
+)
+
+# Display the combined plot
+print(combined_plot)
+
+# Optional: Save the plot
+# ggsave("combined_ELISA_plots.png", combined_plot, width = 14, height = 10, dpi = 300)
+
+```
+

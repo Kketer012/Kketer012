@@ -1,0 +1,672 @@
+---
+title: "Untitled"
+author: "Kelvias Keter"
+date: "2025-07-06"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+## knitr options
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = F, message = FALSE,echo = TRUE)
+```
+
+### Load packages
+
+```{r }
+library(pacman)
+
+p_load("tidyverse", "readxl","gtsummary","gt", "writexl", "ggpubr", "ggplot2","here","dgof", "reshape2","psych","DescTools","mdatools","lme4", "Matrix","sjPlot","rms","here","bstfun","patchwork","rstatix", "car","flextable","purrr","lattice","cutpointr","binom","devtools","effsize")
+
+# devtools::install_github("MSKCC-Epi-Bio/bstfun")
+
+
+```
+
+## Set paths and load data
+
+This code chunk aims to import the shigella dataset
+
+```{r}
+shigella_dataset<-read.csv("C:\\Users\\Kelvias Keter\\Downloads\\for_shigella_full_dataset(1).csv")
+
+Flex_2a_dataset <- read.csv("C:\\Users\\Kelvias Keter\\Downloads\\Flex2a.csv")
+
+```
+
+
+### filter northern uganda
+```{r}
+Flex_2a_dataset <- Flex_2a_dataset %>%
+  filter(site %in% c("Kilifi", "Kisumu", "Nairobi"))
+```
+
+
+## Renaming variables
+
+```{r}
+
+## rename participants in Flex_2a_dataset
+Flex_2a_dataset <- Flex_2a_dataset %>% 
+  rename(Sample_ID = pID.1)
+
+###rename column2 in Flex_2a_dataset
+
+Flex_2a_dataset <- Flex_2a_dataset %>% 
+  rename(Flex_2a_IgG = Column2)
+
+###rename sex.1 in Flex_2a_dataset
+Flex_2a_dataset <- Flex_2a_dataset %>% 
+  rename(sex = Sex.1)
+
+###rename age in Flex_2a_dataset
+Flex_2a_dataset <- Flex_2a_dataset %>% 
+  rename(age_years = Age.1)
+
+###rename age cat in Flex_2a_dataset
+Flex_2a_dataset <- Flex_2a_dataset %>% 
+  rename(age_cat = Sheet1.age_cat)
+
+###rename study number in shigella_dataset
+shigella_dataset <- shigella_dataset %>% 
+  rename(Sample_ID = study_no)
+
+```
+
+###merge the two dataset
+```{r}
+## checking duplication in Flex_2a_dataset
+dup <- sum(duplicated(Flex_2a_dataset$Sample_ID))  # Counts the number of duplicate rows
+print(dup)
+
+## checking duplication in shigella_dataset
+dup <- sum(duplicated(shigella_dataset$Sample_ID))  # Counts the number of duplicate rows
+print(dup)
+
+# Using match() to find matches
+matches <- shigella_dataset$Sample_ID %in% Flex_2a_dataset$Sample_ID
+print(matches)  # Returns TRUE/FALSE for each participant
+
+### checking if they match
+matches <- match(shigella_dataset$Sample_ID, Flex_2a_dataset$Sample_ID)
+
+print(matches)
+
+# Count the number of matches
+num_matches <- sum(!is.na(matches))
+print(num_matches)
+
+### dataset with IgG and sample ID
+Flex_2a_dataset1 <- Flex_2a_dataset  %>% 
+  select(c(Sample_ID,Flex_2a_IgG))
+
+# Find matching participants
+Merged_dataset <- inner_join(Flex_2a_dataset1, shigella_dataset, by = "Sample_ID")
+
+
+## rename sex Merged_dataset
+Merged_dataset$sex <- replace(Merged_dataset$sex,
+                                   Merged_dataset$sex == "m", 
+                                   "Male")
+Merged_dataset$sex <- replace(Merged_dataset$sex,
+                                   Merged_dataset$sex == "f", 
+                                   "Female")
+
+```
+
+###creating age groups
+```{r}
+
+Merged_dataset <- Merged_dataset %>%
+  mutate(Age_group = case_when(
+    age_years < 5 ~ "<5 yrs",
+    age_years >= 5 & age_years <= 9 ~ "5-9 yrs",
+    age_years >= 10 & age_years <= 15 ~ "10-15 yrs",
+    TRUE ~ NA_character_
+  ))%>%
+  relocate(Age_group, .after = age_years)
+```
+
+## creating a new variable of high and low responses
+```{r}
+
+# Calculate 66.7th percentile (upper tertile cutoff)
+tertile_cutoff <- quantile(Merged_dataset$Flex_2a_IgG, probs = 2/3, na.rm = TRUE)
+
+# Create tertile group: "Low" (bottom 2/3), "High" (top 1/3)
+Merged_dataset <- Merged_dataset %>%
+  mutate(Flex_2a_tertile = ifelse(Flex_2a_IgG <= tertile_cutoff, "Low", "High"))%>%
+  relocate(Flex_2a_tertile, .after = Flex_2a_IgG)
+
+```
+
+### arranging variables
+```{r}
+library(dplyr)
+
+Merged_dataset <- Merged_dataset %>%
+  relocate(site, .before = Flex_2a_IgG)%>%
+  relocate(sex, .before = site)%>%
+  relocate(dob, .before = sex)%>%
+  relocate(age_months, .before = sex)%>%
+  relocate(age_years, .before = sex)%>%
+  relocate(Age_group, .before = sex)%>%
+  relocate(weight, .before = floor_type)%>%
+  relocate(height, .before = floor_type)%>%
+  relocate(muac, .before = floor_type)%>%
+  relocate(site, .before = Sample_ID)
+```
+
+## creating variable ( Nutrition status by muac)
+```{r}
+Merged_dataset <- Merged_dataset %>%
+  mutate(Nutrition_status = case_when(
+    muac < 11.5 ~ "Severe acute malnutrition",
+    muac >= 11.5 & muac < 12.5 ~ "Moderate acute malnutrition",
+    muac >= 12.5~ "Normal",
+    TRUE ~ NA_character_
+  ))%>%
+  relocate(Nutrition_status, .after = muac)
+```
+
+### creating variable (BMI)
+```{r}
+Merged_dataset <- Merged_dataset %>%
+  mutate(BMI = weight / ( (height / 100)^2 ))%>%
+  relocate(BMI, .before = muac)
+
+```
+
+###Creating age in days
+```{r}
+Merged_dataset <- Merged_dataset %>%
+  mutate(Age_days= age_years*365)%>%
+  relocate(Age_days, .before = age_years)
+```
+
+### duplicating sex to create coded sex
+```{r}
+Merged_dataset$coded_sex <- Merged_dataset$sex
+
+###relocating the new column
+Merged_dataset <- Merged_dataset %>%
+  relocate(coded_sex, .after = sex)
+
+###rename the observations in coded_sex
+Merged_dataset$coded_sex <- replace(Merged_dataset$coded_sex,
+                                   Merged_dataset$coded_sex == "Male", 
+                                   "1")
+Merged_dataset$coded_sex <- replace(Merged_dataset$coded_sex,
+                                   Merged_dataset$coded_sex == "Female", 
+                                   "2")
+
+
+```
+
+###calculating weight for height zscores
+```{r}
+library(zscorer)
+
+Merged_dataset <- addWGSR(data = Merged_dataset, sex = "coded_sex", firstPart = "weight",
+               secondPart = "height", index = "wfh")
+###relocating the new column
+Merged_dataset <- Merged_dataset %>%
+  relocate(wfhz, .after = height)
+
+
+```
+###duplicating IgG and converting to a binary response
+```{r}
+Merged_dataset$Flex_2a_tertile_coded <- Merged_dataset$Flex_2a_tertile
+
+###relocating the new column
+Merged_dataset <- Merged_dataset %>%
+  relocate(Flex_2a_tertile_coded, .after = Flex_2a_tertile)
+
+###rename the observations in Flex_2a_tertile_coded
+Merged_dataset$Flex_2a_tertile_coded <- replace(Merged_dataset$Flex_2a_tertile_coded,
+                                   Merged_dataset$Flex_2a_tertile_coded == "Low", 
+                                   "0")
+Merged_dataset$Flex_2a_tertile_coded <- replace(Merged_dataset$Flex_2a_tertile_coded,
+                                   Merged_dataset$Flex_2a_tertile_coded == "High", 
+                                   "1")
+
+```
+### converting Flex_2a_tertile_coded as numeric
+```{r}
+Merged_dataset$Flex_2a_tertile_coded <- as.factor(Merged_dataset$Flex_2a_tertile_coded)
+
+```
+
+
+###regression for IgG high responses
+```{r}
+# Set a valid theme element
+list("tbl_regression-str:ref_row_text" = "Ref") %>%
+  set_gtsummary_theme() 
+
+Merged_dataset$sex <- as.factor(Merged_dataset$sex)
+Merged_dataset$Age_group <- as.factor(Merged_dataset$Age_group)
+Merged_dataset$Nutrition_status <- factor( Merged_dataset$Nutrition_status,
+  levels = c("Normal", "Moderate acute malnutrition", "Severe acute malnutrition")  # Put the reference first
+)
+
+## Univariate analysis
+reg_model <- Merged_dataset %>%
+  dplyr::select(Flex_2a_tertile_coded, site, Age_group, sex, Nutrition_status) %>% 
+  tbl_uvregression(
+    label = list(
+      site ~ "Location", 
+      Age_group ~ "Age (Yrs)", 
+      sex ~ "Gender", 
+      Nutrition_status ~ "Nutrition status (MUAC)"
+    ),
+    method = glm,
+    y = Flex_2a_tertile_coded,
+    method.args = list(family = "binomial"),
+    exponentiate = TRUE
+  ) %>% 
+  bold_p(t = 0.05) %>% 
+  modify_header(label = "**Covariates**") %>% 
+  italicize_levels() 
+
+reg_model
+
+# Multivariate analysis
+bm1 <- glm(Flex_2a_tertile_coded ~ site + Age_group + sex + Nutrition_status, 
+           data = Merged_dataset, family = binomial)
+
+bm_table1 <- tbl_regression(
+    bm1,
+    exponentiate = TRUE,
+    label = list(
+      site ~ "Location", 
+      Age_group ~ "Age (Yrs)", 
+      sex ~ "Gender", 
+      Nutrition_status ~ "Nutrition status (MUAC)"
+    )
+  ) %>% 
+  bold_p(t = 0.05) %>% 
+  modify_header(label = "**Covariates**") %>% 
+  italicize_levels() 
+
+bm_table1
+
+# Combine
+uni_multi <- tbl_merge(
+  tbls = list(reg_model, bm_table1), 
+  tab_spanner = c("**Univariate analysis**", "**Multivariate analysis**")
+)
+
+uni_multi
+
+# Save
+uni_multi %>%
+  as_flex_table() %>%
+  save_as_image(path = "fancy_tableIgG_FLEX2a.png")
+
+```
+###roc curve
+```{r}
+
+library(pROC)
+
+# Predict probabilities
+prob <- predict(bm1, type = "response")
+
+# Compute ROC curve
+roc_obj <- roc(model_data$Flex_2a_tertile_coded, prob)
+
+# Plot ROC curve
+plot(roc_obj, col = "#1f78b4", lwd = 2, main = "ROC Curve")
+abline(a = 0, b = 1, lty = 2, col = "gray")
+
+# Calculate AUC
+auc_value <- auc(roc_obj)
+cat("AUC:", auc_value, "\n")
+
+# Calculate 95% confidence interval for AUC
+auc_ci <- ci.auc(roc_obj)
+cat("95% CI for AUC:", auc_ci[1], "-", auc_ci[3], "\n")
+
+# Optional: Add the CI text to the plot
+legend("bottomright", legend = paste0("AUC = ", round(auc_value, 3), 
+                                      "\n95% CI: ", round(auc_ci[1], 3), "-", round(auc_ci[3], 3)),
+       bty = "n")
+
+
+```
+
+## Code to save a merged dataset
+
+```{r}
+write_csv(Merged_dataset, "Merged_dataset.csv")
+
+```
+
+## Participant characteristics 
+
+
+```{r}
+
+Merged_dataset%>% dplyr::select(c(sex,Age_group,site,Nutrition_status, Age_groups)) %>%
+  tbl_summary(by=site,
+    label = list(sex~"Gender",
+                 Age_groups~"Age (Years)",
+                 Nutrition_status~"Nutrition status"),
+    missing = "no"
+                 ) %>%
+  add_stat_label(label=all_continuous()~"Median (IQR)") %>% 
+  add_overall() %>% 
+  add_variable_grouping ("Demographics"=c(
+    "sex",
+    "Age_groups")) %>%
+  add_variable_grouping (" Nutrition status (MUAC)"=c(
+    "Nutrition_status")) %>% 
+  add_n() %>% 
+  add_p() %>% 
+  bold_labels() %>% 
+  bold_p() %>% 
+  modify_caption("Table 2. Participant characteristics") %>% 
+  as_gt() %>% 
+  gt::gtsave(filename = "tblxticsshigella.png",vheight = 1000)
+  
+
+```
+
+###log transformation of Flex_2a_IgG
+```{r}
+Merged_dataset <- Merged_dataset %>% 
+  mutate(Flex_2a_IgG_log=log(Flex_2a_IgG)) %>% 
+  dplyr::relocate(Flex_2a_IgG_log, .after = Flex_2a_IgG)
+
+```
+
+### Boxplots for log-transformed IgG ELISA units by age 
+```{r}
+library(dplyr)
+library(ggpubr)
+library(ggplot2)
+
+# Create Age_group variable with corrected labels
+Merged_dataset <- Merged_dataset %>%
+  mutate(
+    Age_group = case_when(
+      age_years < 5 ~ "<5 yrs",
+      age_years >= 5 & age_years <= 9 ~ "5-9 Yrs",         # Corrected casing
+      age_years >= 10 & age_years <= 15 ~ "10-15 Yrs",     # Corrected casing
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  relocate(Age_group, .after = age_years)
+
+# Convert to factor with correct level order
+Merged_dataset$Age_group <- factor(Merged_dataset$Age_group,
+                                   levels = c("<5 yrs", "5-9 Yrs", "10-15 Yrs"))
+
+# Check distribution (optional)
+table(Merged_dataset$Age_group, useNA = "ifany")
+
+# Set method types
+method1 <- "kruskal.test"   # or "anova"
+method2 <- "wilcox.test"    # or "t.test"
+
+# Comparisons for post-hoc tests
+my_comparisations1 <- list(
+  c("<5 yrs", "5-9 Yrs"),
+  c("<5 yrs", "10-15 Yrs"),
+  c("5-9 Yrs", "10-15 Yrs")
+)
+
+# Ensure complete data for plotting
+Merged_dataset_plot <- Merged_dataset %>%
+  filter(!is.na(Flex_2a_IgG_log), !is.na(Age_group))
+
+# Plot with group comparisons
+ggboxplot(Merged_dataset_plot,
+          x = "Age_group", y = "Flex_2a_IgG_log",
+          color = "Age_group", palette = "npg",
+          add = "jitter", legend = "none") +
+  stat_compare_means(
+    aes(label = paste0(after_stat(method), ", p = ", after_stat(p.format))),
+    method = method1,
+    label.y = max(Merged_dataset_plot$Flex_2a_IgG_log, na.rm = TRUE, y.label=12) 
+  ) +
+  stat_compare_means(
+    comparisons = my_comparisations1,
+    method = method2,
+    label = "p.signif"
+  ) +
+  labs(title = "", x = "Age", y = "Log-transformed IgG ELISA Units") +
+  theme(text = element_text(size = 20))
+
+folder_path <-"C:\\Users\\Kelvias Keter\\OneDrive\\Desktop\\msc project\\MSc Data analysis\\rplots"
+
+ggsave("Log-transformed flex_IgG_byage.png", path=folder_path, dpi=800, width = 8, height = 6)
+
+
+```
+
+### Boxplots for log-transformed IgG ELISA units by location
+```{r}
+
+# Convert to factor with correct level order
+Merged_dataset$site <- factor(Merged_dataset$site,
+                                   levels = c("Kilifi", "Nairobi", "Kisumu"))
+
+# Check distribution (optional)
+table(Merged_dataset$Age_group, useNA = "ifany")
+
+# Set method types
+method1 <- "kruskal.test"   # or "anova"
+method2 <- "wilcox.test"    # or "t.test"
+
+# Comparisons for post-hoc tests
+my_comparisations2 <- list(
+  c("Nairobi", "Kilifi"),
+  c("Nairobi", "Kisumu"),
+  c("Kilifi", "Kisumu")
+)
+
+# Ensure complete data for plotting
+Merged_dataset_plot <- Merged_dataset %>%
+  filter(!is.na(Flex_2a_IgG_log), !is.na(site))
+
+# Plot with group comparisons
+ggboxplot(Merged_dataset_plot,
+          x = "site", y = "Flex_2a_IgG_log",
+          color = "site", palette = "npg",
+          add = "jitter", legend = "none") +
+  stat_compare_means(
+    aes(label = paste0(after_stat(method), ", p = ", after_stat(p.format))),
+    method = method1,
+    label.y = max(Merged_dataset_plot$Flex_2a_IgG_log, na.rm = TRUE, y.label=15) 
+  ) +
+  stat_compare_means(
+    comparisons = my_comparisations2,
+    method = method2,
+    label = "p.signif"
+  ) +
+  labs(title = "", x = "Location", y = "Log-transformed IgG ELISA Units") +
+  theme(text = element_text(size = 20))
+
+folder_path <-"C:\\Users\\Kelvias Keter\\OneDrive\\Desktop\\msc project\\MSc Data analysis\\rplots"
+
+ggsave("Log-transformed flex_IgG_bylocation.png", path=folder_path, dpi=800, width = 8, height = 6)
+
+```
+### Boxplots for log-transformed IgG ELISA units by gender
+```{r}
+
+my_comparisations3 <- list( c("Female", "Male"))
+
+x <- which(names(Merged_dataset) == "sex") # name of grouping variable
+y <- which(
+  names(Merged_dataset) == "Flex_2a_IgG_log" # names of variables to test
+)
+
+method <- "wilcox.test" # one of "wilcox.test" or "t.test"
+
+Merged_dataset %>%
+  select(c(Flex_2a_IgG_log, sex))
+
+
+for (i in y) {
+  for (j in x) {
+    p <- ggboxplot(Merged_dataset,
+      x = colnames(Merged_dataset[j]), y = colnames(Merged_dataset[i]),
+      color = colnames(Merged_dataset[j]),
+      legend = "none",
+      palette = "npg",
+      add = "jitter"
+    )
+    print(
+      p + stat_compare_means(aes(label = paste0(after_stat(method), ", p-value = ", after_stat(p.format))),
+        method = method, label.y = max(Merged_dataset[, i], na.rm = TRUE, label.y = 15)
+      )
+      + stat_compare_means(comparisons =my_comparisations3 , method = method, label = "p.signif") # remove if p-value of ANOVA or Kruskal-Wallis test >= alpha 
+       +
+        labs(title = "",
+       x = "Gender", y = "Log-transformed IgG ELISA Units") +
+        theme(text = element_text(size=20))
+    )
+  }
+}
+
+folder_path <-"C:\\Users\\Kelvias Keter\\OneDrive\\Desktop\\msc project\\MSc Data analysis\\rplots"
+
+ggsave("Log-transformed flex_IgG_bygender.png", path=folder_path, dpi=800, width = 8, height = 6)
+
+```
+
+### collapsing age to form < &> 5yrs
+```{r}
+Merged_dataset <- Merged_dataset %>%
+  mutate(Age_groups = case_when(
+    age_years < 5 ~ "<5 Yrs",
+    age_years >= 5 ~ ">5 Yrs",
+    TRUE ~ NA_character_
+  ))%>%
+  relocate(Age_groups, .after = age_years)
+```
+
+### Boxplots for log-transformed IgG ELISA units by age_groups
+```{r}
+library(dplyr)
+library(ggpubr)
+library(ggplot2)
+
+# Recode new age group variable (if needed)
+Merged_dataset <- Merged_dataset %>%
+  mutate(
+    Age_groups = case_when(
+      age_years < 5 ~ "<5 Yrs",
+      age_years >= 5 ~ ">5 Yrs",
+      TRUE ~ NA_character_
+    )
+  )
+
+# Convert to factor with correct level order
+Merged_dataset$Age_groups <- factor(Merged_dataset$Age_groups,
+                                    levels = c("<5 Yrs", ">5 Yrs"))
+
+# Check distribution (optional)
+table(Merged_dataset$Age_groups, useNA = "ifany")
+
+# Set method types
+method1 <- "kruskal.test"
+method2 <- "wilcox.test"
+
+# Comparison list must match factor levels
+my_comparisations4 <- list(c("<5 Yrs", ">5 Yrs"))
+
+# Filter complete cases for plotting
+Merged_dataset_plot <- Merged_dataset %>%
+  filter(!is.na(Flex_2a_IgG_log), !is.na(Age_groups))
+
+# Check if data is non-empty before plotting
+if (nrow(Merged_dataset_plot) > 0) {
+  # Store plot in an object
+  p <- ggboxplot(Merged_dataset_plot,
+                 x = "Age_groups", y = "Flex_2a_IgG_log",
+                 color = "Age_groups", palette = "npg",
+                 add = "jitter", legend = "none") +
+    stat_compare_means(
+      aes(label = paste0(after_stat(method), ", p = ", after_stat(p.format))),
+      method = method1,
+      label.y = max(Merged_dataset_plot$Flex_2a_IgG_log, na.rm = TRUE) + 1
+    ) +
+    stat_compare_means(
+      comparisons = my_comparisations4,
+      method = method2,
+      label = "p.signif"
+    ) +
+    labs(title = "", x = "Age", y = "Log-transformed IgG ELISA Units") +
+    theme(text = element_text(size = 20))
+
+  # Print plot
+  print(p)
+
+  # Save plot
+  folder_path <- "C:\\Users\\Kelvias Keter\\OneDrive\\Desktop\\msc project\\MSc Data analysis\\rplots"
+  ggsave("Log-transformed flex_IgG_by_under5_age.png", plot = p, path = folder_path, dpi = 800, width = 8, height = 6)
+} 
+
+
+```
+
+## Participants categorized by age groups
+
+
+```{r}
+Merged_dataset <- Merged_dataset %>%
+  mutate(
+    Age_groups = case_when(
+      age_years < 5 ~ "<5 Yrs",
+      age_years >= 5 ~ ">5 Yrs",
+      TRUE ~ NA_character_
+    ),
+    Age_groups = as.character(Age_groups, levels = c("<5 Yrs", ">5 Yrs"))  # explicitly categorical
+  )
+
+library(gtsummary)
+library(gt)
+library(dplyr)
+
+summary_table <- Merged_dataset %>%
+  select(sex, Age_groups, site, Nutrition_status, Flex_2a_IgG) %>%
+  mutate(Flex_2a_IgG = as.numeric(Flex_2a_IgG)) %>%
+  tbl_summary(
+    by = Age_groups,
+    label = list(
+      sex ~ "Gender",
+      site ~ "Location",
+      Nutrition_status ~ "Nutrition status (MUAC)",
+      Flex_2a_IgG ~ "Flex 2A IgG response"
+    ),
+    type = list(
+      Flex_2a_IgG ~ "continuous"
+    ),
+    statistic = all_continuous() ~ "{median} ({p25}, {p75})",
+    missing = "no"
+  ) %>%
+  add_overall() %>%
+  add_n() %>%
+  add_p() %>%
+  bold_labels() %>%
+  bold_p() %>%
+  modify_caption("**Table 3. Participant characteristics**")
+
+gtsave(
+  as_gt(summary_table),
+  filename = "tblxticsshigella_1.png",
+  path = "C:/Users/Kelvias Keter/OneDrive/Desktop/msc project/MSc Data analysis/rplots",
+  vheight = 1000
+)
+
+
+
+```
+

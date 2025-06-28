@@ -1,0 +1,153 @@
+---
+title: "Untitled"
+author: "KKK"
+date: "2025-01-25"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+## knitr options
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = F, message = FALSE,echo = TRUE)
+```
+
+### Load packages
+
+```{r }
+library(pacman)
+
+p_load("tidyverse", "readxl","gtsummary","gt", "writexl", "ggpubr", "ggplot2","here","dgof", "reshape2","psych","DescTools","mdatools","lme4", "Matrix","sjPlot","rms","here","bstfun","patchwork","rstatix", "car","flextable","purrr","lattice","cutpointr","binom","devtools","effsize","pROC")
+
+# devtools::install_github("MSKCC-Epi-Bio/bstfun")
+
+
+```
+
+## standard curve
+```{r}
+
+# Load necessary libraries
+library(ggplot2)
+
+# Step 1: Prepare your data (Ct values and corresponding quantities)
+# Use the data you provided, organized into a data frame
+data <- data.frame(
+  SampleName = rep(c("STD 1", "STD 2", "STD 3", "STD 4", "STD 5", "STD 6", "STD 7", "STD 8"), each = 3),
+  CtMean = c(15.396, 15.396, 15.396, 17.891, 17.891, 17.891, 
+             19.610, 19.610, 19.610, 23.158, 23.158, 23.158, 
+             26.557, 26.557, 26.557, 34.970, 34.970, 34.970, 
+             31.604, 31.604, 31.604, 33.149, 33.149, 33.149),
+  Quantity = c(85000, 85000, 85000, 30000, 30000, 30000, 
+               20000, 20000, 20000, 10000, 10000, 10000, 
+               5000, 5000, 5000, 100, 100, 100, 
+               20, 20, 20, 4, 4, 4)
+)
+
+# Step 2: Log-transform the Quantity data for the standard curve
+data$logQuantity <- log10(data$Quantity)
+
+# Step 3: Fit a linear model to the data
+standard_curve_model <- lm(logQuantity ~ CtMean, data = data)
+
+# Step 4: Plot the standard curve using ggplot2
+ggplot(data, aes(x = CtMean, y = logQuantity)) +
+  geom_point(color = "blue") +  # Plot the data points
+  geom_smooth(method = "lm", col = "red", se = FALSE) +  # Add the regression line
+  labs(title = "Standard Curve", x = "Ct Mean", y = "Log(Quantity)") +
+  theme_minimal()
+
+# Optional: Display the model summary
+summary(standard_curve_model)
+
+
+```
+
+### quantification
+```{r}
+# Load necessary libraries
+library(ggplot2)
+
+# Step 1: Prepare the standard curve data (Ct values and corresponding quantities)
+data <- data.frame(
+  SampleName = rep(c("STD 1", "STD 2", "STD 3", "STD 4", "STD 5", "STD 6", "STD 7", "STD 8"), each = 3),
+  CtMean = c(15.396, 15.396, 15.396, 17.891, 17.891, 17.891, 
+             19.610, 19.610, 19.610, 23.158, 23.158, 23.158, 
+             26.557, 26.557, 26.557, 34.970, 34.970, 34.970, 
+             31.604, 31.604, 31.604, 33.149, 33.149, 33.149),
+  Quantity = c(85000, 85000, 85000, 30000, 30000, 30000, 
+               20000, 20000, 20000, 10000, 10000, 10000, 
+               5000, 5000, 5000, 100, 100, 100, 
+               20, 20, 20, 4, 4, 4)
+)
+
+# Step 2: Log-transform the Quantity data for the standard curve
+data$logQuantity <- log10(data$Quantity)
+
+# Step 3: Fit a linear model to the data (standard curve)
+standard_curve_model <- lm(logQuantity ~ CtMean, data = data)
+
+# Step 4: Plot the standard curve (optional)
+ggplot(data, aes(x = CtMean, y = logQuantity)) +
+  geom_point(color = "blue") +  # Plot the data points
+  geom_smooth(method = "lm", col = "red", se = FALSE) +  # Add the regression line
+  labs(title = "Standard Curve", x = "Ct Mean", y = "Log(Quantity)") +
+  theme_minimal()
+
+# Step 5: Calculate the quantity of unknown samples using their Ct values
+# Let's say the unknown sample has a Ct value of 28.000
+unknown_ct <- 28.000
+
+# Step 6: Predict the log(Quantity) for the unknown sample using the standard curve model
+log_quantity_predicted <- predict(standard_curve_model, newdata = data.frame(CtMean = unknown_ct))
+
+# Step 7: Convert the predicted log(Quantity) back to the actual Quantity (by taking the inverse log)
+quantity_predicted <- 10^log_quantity_predicted  # 10 raised to the power of predicted log(Quantity)
+
+# Output the estimated quantity of the unknown sample
+cat("Estimated quantity of the unknown sample with Ct =", unknown_ct, "is:", quantity_predicted, "units\n")
+
+
+```
+
+## quan
+```{r}
+# Load necessary libraries
+library(ggplot2)
+
+# Step 1: Prepare the standard curve data (Ct values and corresponding quantities)
+data <- data.frame(
+  SampleName = rep(c("STD 1", "STD 2", "STD 3", "STD 4", "STD 5", "STD 6", "STD 7", "STD 8"), each = 3),
+  CtMean = c(15.396, 15.396, 15.396, 17.891, 17.891, 17.891, 
+             19.610, 19.610, 19.610, 23.158, 23.158, 23.158, 
+             26.557, 26.557, 26.557, 34.970, 34.970, 34.970, 
+             31.604, 31.604, 31.604, 33.149, 33.149, 33.149),
+  Quantity = c(85000, 85000, 85000, 30000, 30000, 30000, 
+               20000, 20000, 20000, 10000, 10000, 10000, 
+               5000, 5000, 5000, 100, 100, 100, 
+               20, 20, 20, 4, 4, 4)
+)
+
+# Step 2: Log-transform the Quantity data for the standard curve
+data$logQuantity <- log10(data$Quantity)
+
+# Step 3: Fit a linear model to the data (standard curve)
+standard_curve_model <- lm(logQuantity ~ CtMean, data = data)
+
+# Step 4: Calculate the quantity of multiple unknown samples using their Ct values
+# Example unknown samples with Ct values above 25
+unknown_samples_ct <- c(42.374, 28.591, 39.541)
+
+# Step 5: Predict the log(Quantity) for each unknown sample using the standard curve model
+log_quantity_predicted <- predict(standard_curve_model, newdata = data.frame(CtMean = unknown_samples_ct))
+
+# Step 6: Convert the predicted log(Quantity) back to the actual Quantity (by taking the inverse log)
+quantity_predicted <- 10^log_quantity_predicted  # 10 raised to the power of predicted log(Quantity)
+
+# Step 7: Output the estimated quantities of the unknown samples
+for (i in 1:length(unknown_samples_ct)) {
+  cat("Estimated quantity of unknown sample with Ct =", unknown_samples_ct[i], "is:", quantity_predicted[i], "units\n")
+}
+
+```
+your provided data
